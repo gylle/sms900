@@ -1,0 +1,10 @@
+{
+    "server": "localhost",
+    "server_port": 6667,
+    "nickname": "sms900",
+    "channel": "#testchannel",
+
+    "twilio_number": "+461234567",
+    "twilio_account_sid": "123456",
+    "twilio_auth_token": "abcdef"
+}
