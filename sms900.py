@@ -1,9 +1,11 @@
 import json
 import logging
+from os import mkdir, path
 import queue
 import re
 import sys
 import traceback
+import uuid
 
 import twilio
 from twilio.rest import TwilioRestClient
@@ -15,6 +17,7 @@ from phonebook import PhoneBook, SMS900InvalidAddressbookEntry
 from stats import SMSStats
 from ircthread import IRCThread
 from http_interface import HTTPThread
+from tele2mms.mmsfetcher import MMSFetcher
 
 class SMS900InvalidNumberFormatException(Exception):
     pass
@@ -141,6 +144,11 @@ class SMS900():
             sms_msg = event['msg']
             sender = self.lookup_nickname(number)
 
+            m = re.search('ett MMS.+hamtamms.+koden ([^ ]+)', event['msg'])
+            if m:
+                self._download_mms(sender, m.group(1))
+                return
+
             msg = '<%s> %s' % (sender, sms_msg)
             self.send_privmsg(self.config['channel'], msg)
 
@@ -245,3 +253,62 @@ class SMS900():
         else:
             return m.group(1)
 
+    def _download_mms(self, sender, code):
+        self.send_privmsg(self.config['channel'], "MMS from %s, downloading.." % sender)
+
+        rel_path = str(uuid.uuid4())
+        save_path = path.join(
+            self.config['mms_save_path'],
+            rel_path
+        )
+
+        mkdir(save_path)
+
+        # FIXME: Hack.
+        msisdn = self.config['twilio_number'].replace('+46', '0')
+        fetcher = MMSFetcher(msisdn, code, save_path)
+        files = fetcher.download_all()
+
+        base_url = "%s/%s" % (
+            self.config['external_mms_url'],
+            rel_path
+        )
+
+        mms_summary = self._get_mms_summary(base_url, files)
+        if mms_summary:
+            self.send_privmsg(
+                self.config['channel'],
+                "<%s> %s" % (sender, mms_summary)
+            )
+
+        self.send_privmsg(
+            self.config['channel'],
+            " (Received %d file(s): %s)" % (len(files), base_url)
+        )
+
+    def _get_mms_summary(self, base_url, files):
+        try:
+            text = None
+            img_url = None
+
+            # Find the first text and the first image file, if any
+            for full_path in files:
+                m = re.search('\.([^.]+)$', full_path)
+                if m:
+                    if not img_url:
+                        if m.group(1) in ['jpg', 'jpeg', 'png']:
+                            filename = path.basename(full_path)
+                            img_url = "%s/%s" % (base_url, filename)
+
+                    if not text:
+                        if m.group(1) in ['txt']:
+                            with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                text = f.read()
+
+            if text or img_url:
+                return ", ".join([p for p in [text, img_url] if p])
+
+        except Exception:
+            traceback.print_exc()
+
+        return None
