@@ -100,7 +100,6 @@ class SMS900():
             self.send_privmsg(self.config['channel'], "Error: %s" % e)
         except Exception as e:
             self.send_privmsg(self.config['channel'], "Unknown error: %s" % e)
-            exc_type, exc_value, exc_traceback = sys.exc_info()
             traceback.print_exc()
 
     def handle_irc_event(self, event):
