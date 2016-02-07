@@ -253,8 +253,6 @@ class SMS900():
             return m.group(1)
 
     def _download_mms(self, sender, code):
-        self.send_privmsg(self.config['channel'], "MMS from %s, downloading.." % sender)
-
         rel_path = str(uuid.uuid4())
         save_path = path.join(
             self.config['mms_save_path'],
@@ -273,17 +271,18 @@ class SMS900():
             rel_path
         )
 
-        mms_summary = self._get_mms_summary(base_url, files)
+        mms_summary, summary_contains_all = self._get_mms_summary(base_url, files)
         if mms_summary:
             self.send_privmsg(
                 self.config['channel'],
-                "<%s> %s" % (sender, mms_summary)
+                "[MMS] <%s> %s" % (sender, mms_summary)
             )
 
-        self.send_privmsg(
-            self.config['channel'],
-            " (Received %d file(s): %s)" % (len(files), base_url)
-        )
+        if not summary_contains_all:
+            self.send_privmsg(
+                self.config['channel'],
+                "Received %d file(s): %s" % (len(files), base_url)
+            )
 
     def _get_mms_summary(self, base_url, files):
         try:
@@ -305,9 +304,12 @@ class SMS900():
                                 text = f.read()
 
             if text or img_url:
-                return ", ".join([p for p in [text, img_url] if p])
+                parts = [text, img_url]
+                message = ", ".join([p for p in parts if p])
+                summary_contains_all = (len(parts) == len(files))
+                return message, summary_contains_all
 
         except Exception:
             traceback.print_exc()
 
-        return None
+        return None, False
