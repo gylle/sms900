@@ -18,6 +18,10 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
     def set_pong_queue(cls, pong_queue):
         cls.pong_queue = pong_queue
 
+    @classmethod
+    def set_channel(cls, channel):
+        cls.channel = channel
+
     def __init__(self, client):
         super(IRCThreadCallbackHandler, self).__init__(client)
         self.cli = client
@@ -49,6 +53,17 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
     def pong(self, prefix, server, something):
         logging.info("PONG/%s/%s/%s" % (prefix, server, something))
         self.pong_queue.append(server)
+
+    def nicknameinuse(self, server, b, nickname, msg):
+        logging.info("Nickname already in use: %s/%s/%s/%s" % (server, b, nickname, msg))
+        # FIXME: This algorithm is stupid
+        nickname = nickname.decode('ascii') + "_"
+        logging.info("Trying with %s.." % nickname)
+        self.client.send("NICK %s" % nickname)
+
+    def welcome(self, a, b, c):
+        logging.info("(001) Welcome: %s/%s/%s" % (a, b, c))
+        self.client.send("JOIN %s" % self.channel)
 
     def handle_cmd_stats(self, hostmask, chan, cmd):
         self._add_event('SHOW_STATS', {
@@ -136,13 +151,13 @@ class IRCThread(Thread):
         self.irc_host = host
         self.irc_port = port
         self.irc_nick = nick
-        self.irc_channel = channel
 
         self.pong_queue = deque()
         self.cmd_queue = deque()
 
         IRCThreadCallbackHandler.set_sms900(sms900)
         IRCThreadCallbackHandler.set_pong_queue(self.pong_queue)
+        IRCThreadCallbackHandler.set_channel(channel)
 
     def run(self):
         while True:
@@ -158,8 +173,7 @@ class IRCThread(Thread):
         cli = IRCClient(IRCThreadCallbackHandler,
                         host=self.irc_host,
                         port=self.irc_port,
-                        nick=self.irc_nick,
-                        connect_cb=self.connect_callback)
+                        nick=self.irc_nick)
 
         self.ping_last_reply = time.time()
         self.ping_sent_at = False
@@ -197,9 +211,6 @@ class IRCThread(Thread):
             else:
                 if lag > self.PING_TIMEOUT:
                     raise Exception("Lag is %s, exceeded timeout %s" % (lag, self.PING_TIMEOUT))
-
-    def connect_callback(self, cli):
-        helpers.join(cli, self.irc_channel)
 
     def send_privmsg(self, target, msg):
         self.cmd_queue.append(['PRIVMSG', target, msg])
