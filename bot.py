@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-#
 """ bot.py - Main file to run the bot """
 import argparse
 import logging

@@ -1,4 +1,3 @@
-#!/bin/env python3
 """ The main bot module for sms900 """
 import json
 import logging
