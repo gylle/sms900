@@ -53,33 +53,18 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
         hostmask = _hostmask.decode("utf-8", "ignore")
 
         cmd_dispatch = {
-            's':     self._parse_cmd_s,
-            'a':     self._parse_cmd_a,
-            'd':     self._parse_cmd_d,
-            'h':     self._parse_cmd_h,
-            'l':     self._parse_cmd_l
+            's':     self._parse_cmd_send_sms,
+            'a':     self._parse_cmd_pb_add,
+            'd':     self._parse_cmd_pb_del,
+            'h':     self._parse_cmd_help,
+            'l':     self._parse_cmd_lookup_carrier
             }
         m = re.match('^\!(s|a|d|h|l)( .*|$)', msg, re.UNICODE)
         if m:
             args = m.group(2)
             cmd_dispatch[m.group(1).strip()](hostmask, chan, args)
 
-    def _parse_cmd_l(self, hostmask, chan, cmd):
-        logging.info('s! %s %s %s' % (hostmask, chan, cmd))
-
-        m = re.match('^\s*(\S+)$', cmd, re.UNICODE)
-        if not m:
-            helpers.msg(self.cli, chan, 'Usage: !l(ookup) <number>')
-            return
-
-        number = m.group(1)
-
-        self.sms900.queue_event('LOOKUP_CARRIER', {
-            'hostmask' : hostmask,
-            'number' : number
-        })
-
-    def _parse_cmd_s(self, hostmask, chan, cmd):
+    def _parse_cmd_send_sms(self, hostmask, chan, cmd):
         logging.info('s! %s %s %s' % (hostmask, chan, cmd))
 
         m = re.match('^\s*(\S+)\s+(.+)', cmd, re.UNICODE)
@@ -96,7 +81,7 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
             'msg' : msg
         })
 
-    def _parse_cmd_a(self, hostmask, chan, cmd):
+    def _parse_cmd_pb_add(self, hostmask, chan, cmd):
         logging.info('s! %s %s %s' % (hostmask, chan, cmd))
 
         m = re.match('^\s*(\S+)\s+(\S+)\s*$', cmd, re.UNICODE)
@@ -113,7 +98,7 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
             'number' : number
         })
 
-    def _parse_cmd_d(self, hostmask, chan, cmd):
+    def _parse_cmd_pb_del(self, hostmask, chan, cmd):
         logging.info('s! %s %s %s' % (hostmask, chan, cmd))
 
         m = re.match('^\s*(\S+)\s*$', cmd, re.UNICODE)
@@ -127,8 +112,22 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
             'nickname' : nickname
         })
 
+    def _parse_cmd_lookup_carrier(self, hostmask, chan, cmd):
+        logging.info('s! %s %s %s' % (hostmask, chan, cmd))
 
-    def _parse_cmd_h(self, hostmask, chan, cmd):
+        m = re.match('^\s*(\S+)$', cmd, re.UNICODE)
+        if not m:
+            helpers.msg(self.cli, chan, 'Usage: !l(ookup) <number>')
+            return
+
+        number = m.group(1)
+
+        self.sms900.queue_event('LOOKUP_CARRIER', {
+            'hostmask' : hostmask,
+            'number' : number
+        })
+
+    def _parse_cmd_help(self, hostmask, chan, cmd):
         helpers.msg(self.cli, chan, 'Commands: s(end message), a(add contact), d(elete contact), l(ookup), h(elp)')
 
 class IRCThread(Thread):
