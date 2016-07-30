@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+""" bot.py - Main file to run the bot """
 import argparse
 import logging
 
@@ -8,10 +9,9 @@ logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s:%(funcName)-30s:%(levelname)-8s %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S')
 
+PARSER = argparse.ArgumentParser()
+PARSER.add_argument('-f', help='Use the given configuration file', default='config.json')
+ARGS = PARSER.parse_args()
 
-parser = argparse.ArgumentParser()
-parser.add_argument('-f', help = 'Use the given configuration file', default = 'config.json')
-args = parser.parse_args()
-
-sms900 = SMS900(args.f)
-sms900.run()
+THEBOT = SMS900(ARGS.f)
+THEBOT.run()
