@@ -23,13 +23,31 @@ class SMS900InvalidNumberFormatException(Exception):
 
 class SMS900():
     def __init__(self, configuration_path):
-        self._load_configuration(configuration_path)
-        self._init_database()
-        self.pb = PhoneBook(self.dbconn)
+        self.configuration_path = configuration_path
         self.events = queue.Queue();
 
-    def _load_configuration(self, configuration_path):
-        with open(configuration_path, 'r') as f:
+    def run(self):
+        self._load_configuration()
+        self._init_database()
+        self.pb = PhoneBook(self.dbconn)
+
+        logging.info("Starting IRCThread thread")
+        self.irc_thread = IRCThread(self,
+                                    self.config['server'],
+                                    self.config['server_port'],
+                                    self.config['nickname'],
+                                    self.config['channel'])
+        self.irc_thread.start()
+
+        logging.info("Starting webserver")
+        http_thread = HTTPThread(self, ('0.0.0.0', 8090))
+        http_thread.start()
+
+        logging.info("Starting main loop")
+        self._main_loop()
+
+    def _load_configuration(self):
+        with open(self.configuration_path, 'r') as f:
             self.config = json.load(f)
 
         # FIXME: Check that we got everything we'll be needing
@@ -53,22 +71,6 @@ class SMS900():
         event = {'event_type': event_type}
         event.update(data)
         self.events.put(event)
-
-    def run(self):
-        logging.info("Starting IRCThread thread")
-        self.irc_thread = IRCThread(self,
-                                    self.config['server'],
-                                    self.config['server_port'],
-                                    self.config['nickname'],
-                                    self.config['channel'])
-        self.irc_thread.start()
-
-        logging.info("Starting webserver")
-        http_thread = HTTPThread(self, ('0.0.0.0', 8090))
-        http_thread.start()
-
-        logging.info("Starting main loop")
-        self._main_loop()
 
     def _main_loop(self):
         while True:
