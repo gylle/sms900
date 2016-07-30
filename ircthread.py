@@ -74,7 +74,7 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
 
         number = m.group(1)
 
-        self.sms900.queue_event('LOOKUP_NUMBER', {
+        self.sms900.queue_event('LOOKUP_CARRIER', {
             'hostmask' : hostmask,
             'number' : number
         })
@@ -151,14 +151,14 @@ class IRCThread(Thread):
     def run(self):
         while True:
             try:
-                self.connect_and_run()
+                self._connect_and_run()
             except Exception as e:
                 logging.info("Exception caught, reconnecting: %s" % e)
 
             logging.info("Sleeping for 5 seconds..")
             time.sleep(5)
 
-    def connect_and_run(self):
+    def _connect_and_run(self):
         cli = IRCClient(IRCThreadCallbackHandler,
                         host=self.irc_host,
                         port=self.irc_port,
@@ -178,11 +178,11 @@ class IRCThread(Thread):
                 logging.info('Handling event (%s) -> (%s, %s)' % (cmd, target, msg))
                 helpers.msg(cli, target, msg)
 
-            self.check_connection(cli)
+            self._check_connection(cli)
 
             time.sleep(0.2)
 
-    def check_connection(self, cli):
+    def _check_connection(self, cli):
         if not self.ping_sent_at:
             if time.time() - self.ping_last_reply > self.PING_INTERVAL:
                 self.ping_sent_at = time.time()

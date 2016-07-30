@@ -9,17 +9,8 @@ class PhoneBook:
     def __init__(self, dbconn):
         self.dbconn = dbconn
 
-    def get_valid_nickname(self, nickname):
-        m = re.match('^([a-zA-Z0-9\\\\\]\[`^{}-]{1,15})$', nickname)
-        if not m:
-            raise SMS900InvalidAddressbookEntry(
-                "Invalid nickname: %s (Should match [a-zA-Z0-9\\\\\]\[`^{}-]{1,15})" % nickname
-            )
-
-        return m.group(1).lower()
-
     def add_number(self, nickname, number):
-        nickname = self.get_valid_nickname(nickname)
+        nickname = self._get_valid_nickname(nickname)
 
         # Assume number has been canonicalized
         try:
@@ -31,7 +22,7 @@ class PhoneBook:
             raise SMS900InvalidAddressbookEntry(e)
 
     def get_number(self, nickname):
-        nickname = self.get_valid_nickname(nickname)
+        nickname = self._get_valid_nickname(nickname)
 
         try:
             c = self.dbconn.cursor()
@@ -63,7 +54,7 @@ class PhoneBook:
             raise SMS900InvalidAddressbookEntry(e)
 
     def del_entry(self, nickname):
-        nickname = self.get_valid_nickname(nickname)
+        nickname = self._get_valid_nickname(nickname)
 
         # Assume that the entry exists if this function is called
         try:
@@ -71,3 +62,12 @@ class PhoneBook:
             c.execute("delete from phonebook where nickname = ?", (nickname, ))
         except Exception as e:
             raise SMS900InvalidAddressbookEntry(e)
+
+    def _get_valid_nickname(self, nickname):
+        m = re.match('^([a-zA-Z0-9\\\\\]\[`^{}-]{1,15})$', nickname)
+        if not m:
+            raise SMS900InvalidAddressbookEntry(
+                "Invalid nickname: %s (Should match [a-zA-Z0-9\\\\\]\[`^{}-]{1,15})" % nickname
+            )
+
+        return m.group(1).lower()

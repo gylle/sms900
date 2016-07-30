@@ -23,18 +23,18 @@ class SMS900InvalidNumberFormatException(Exception):
 
 class SMS900():
     def __init__(self, configuration_path):
-        self.load_configuration(configuration_path)
-        self.init_database()
+        self._load_configuration(configuration_path)
+        self._init_database()
         self.pb = PhoneBook(self.dbconn)
         self.events = queue.Queue();
 
-    def load_configuration(self, configuration_path):
+    def _load_configuration(self, configuration_path):
         with open(configuration_path, 'r') as f:
             self.config = json.load(f)
 
         # FIXME: Check that we got everything we'll be needing
 
-    def init_database(self):
+    def _init_database(self):
         self.dbconn = sqlite3.connect('sms900.db', isolation_level = None)
         c = self.dbconn.cursor()
 
@@ -49,15 +49,18 @@ class SMS900():
         except Exception as e:
             logging.info("Failed to create table(s): %s" % e)
 
+    def queue_event(self, event_type, data):
+        event = {'event_type': event_type}
+        event.update(data)
+        self.events.put(event)
+
     def run(self):
-        logging.info("Creating IRCThread instance")
+        logging.info("Starting IRCThread thread")
         self.irc_thread = IRCThread(self,
                                     self.config['server'],
                                     self.config['server_port'],
                                     self.config['nickname'],
                                     self.config['channel'])
-
-        logging.info("Starting IRCThread thread")
         self.irc_thread.start()
 
         logging.info("Starting webserver")
@@ -65,42 +68,45 @@ class SMS900():
         http_thread.start()
 
         logging.info("Starting main loop")
+        self._main_loop()
+
+    def _main_loop(self):
         while True:
             event = self.events.get()
-            self.handle_event(event)
+            self._handle_event(event)
 
-    def handle_event(self, event):
+    def _handle_event(self, event):
         try:
             logging.info('EVENT: %s' % event)
 
             if event['event_type'] == 'SEND_SMS':
                 sender_hm = event['hostmask']
-                number = self.parse_sms_target(event['number'])
-                nickname = self.get_nickname_from_hostmask(sender_hm)
+                number = self._get_number_from_nickname_or_number(event['number'])
+                nickname = self._get_nickname_from_hostmask(sender_hm)
                 # FIXME: Check the sender
                 msg = "<%s> %s" % (nickname, event['msg'])
 
-                self.send_sms(number, msg, sender_hm, )
+                self._send_sms(number, msg, sender_hm, )
             elif event['event_type'] == 'ADD_PB_ENTRY':
-                number = self.canonicalize_number(event['number'])
+                number = self._get_canonicalized_number(event['number'])
                 nickname = event['nickname']
 
                 self.pb.add_number(nickname, number)
-                self.send_privmsg(self.config['channel'], 'Added %s with number %s' % (nickname, number))
+                self._send_privmsg(self.config['channel'], 'Added %s with number %s' % (nickname, number))
             elif event['event_type'] == 'DEL_PB_ENTRY':
                 nickname = event['nickname']
                 oldnumber = self.pb.get_number(nickname)
 
                 self.pb.del_entry(nickname)
-                self.send_privmsg(self.config['channel'], 'Removed contact %s (number: %s)' % (nickname, oldnumber))
-            elif event['event_type'] == 'LOOKUP_NUMBER':
+                self._send_privmsg(self.config['channel'], 'Removed contact %s (number: %s)' % (nickname, oldnumber))
+            elif event['event_type'] == 'LOOKUP_CARRIER':
                 number = event['number']
-                number = self.canonicalize_number(number)
-                self.lookup_carrier(number)
+                number = self._get_canonicalized_number(number)
+                self._lookup_carrier(number)
             elif event['event_type'] == 'SMS_RECEIVED':
                 number = event['number']
                 sms_msg = event['msg']
-                sender = self.lookup_nickname(number)
+                sender = self.pb.get_nickname(number)
 
                 m = re.search('ett MMS.+hamtamms.+koden ([^ ]+)', event['msg'])
                 if m:
@@ -108,22 +114,15 @@ class SMS900():
                     return
 
                 msg = '<%s> %s' % (sender, sms_msg)
-                self.send_privmsg(self.config['channel'], msg)
+                self._send_privmsg(self.config['channel'], msg)
 
-        except SMS900InvalidNumberFormatException as e:
-            self.send_privmsg(self.config['channel'], "Error: %s" % e)
-        except SMS900InvalidAddressbookEntry as e:
-            self.send_privmsg(self.config['channel'], "Error: %s" % e)
+        except (SMS900InvalidNumberFormatException, SMS900InvalidAddressbookEntry) as e:
+            self._send_privmsg(self.config['channel'], "Error: %s" % e)
         except Exception as e:
-            self.send_privmsg(self.config['channel'], "Unknown error: %s" % e)
+            self._send_privmsg(self.config['channel'], "Unknown error: %s" % e)
             traceback.print_exc()
 
-    def queue_event(self, event_type, data):
-        event = {'event_type': event_type}
-        event.update(data)
-        self.events.put(event)
-
-    def send_sms(self, number, message, sender_hm):
+    def _send_sms(self, number, message, sender_hm):
         logging.info('Sending sms ( %s -> %s )' % (message, number))
 
         try:
@@ -134,14 +133,14 @@ class SMS900():
 	        from_ = self.config['twilio_number'],
 	        body = message,
             )
-            self.send_privmsg(
+            self._send_privmsg(
                 self.config['channel'],
                 "Sent %s sms to number %s" % (message_data.num_segments, number)
             )
         except twilio.TwilioRestException as e:
-            self.send_privmsg(self.config['channel'], "Failed to send sms: %s" % e)
+            self._send_privmsg(self.config['channel'], "Failed to send sms: %s" % e)
 
-    def lookup_carrier(self, number):
+    def _lookup_carrier(self, number):
         logging.info('Looking up number %s' % number)
 
         try:
@@ -152,17 +151,17 @@ class SMS900():
                 include_carrier_info=True,
             )
 
-            self.send_privmsg(
+            self._send_privmsg(
                 self.config['channel'],
                 '%s is %s, carrier: %s' % (number, number_data.carrier['type'], number_data.carrier['name'])
             )
         except twilio.TwilioRestException as e:
-            self.send_privmsg(self.config['channel'], "Failed to lookup number: %s" % e)
+            self._send_privmsg(self.config['channel'], "Failed to lookup number: %s" % e)
 
-    def send_privmsg(self, target, msg):
+    def _send_privmsg(self, target, msg):
         self.irc_thread.send_privmsg(target, msg)
 
-    def canonicalize_number(self, number):
+    def _get_canonicalized_number(self, number):
         m = re.match('^\+[0-9]+$', number)
         if m:
             logging.info('number %s already canonicalized, returning as is' % number)
@@ -176,9 +175,9 @@ class SMS900():
 
         raise SMS900InvalidNumberFormatException("%s is not a valid number" % number)
 
-    def parse_sms_target(self, number_or_name):
+    def _get_number_from_nickname_or_number(self, number_or_name):
         try:
-            number_or_name = self.canonicalize_number(number_or_name)
+            number_or_name = self._get_canonicalized_number(number_or_name)
 
         except SMS900InvalidNumberFormatException:
             try:
@@ -190,14 +189,7 @@ class SMS900():
 
         return number_or_name;
 
-    def lookup_nickname(self, number):
-        try:
-            nickname = self.pb.get_nickname(number)
-            return nickname
-        except SMS900InvalidAddressbookEntry:
-            return number
-
-    def get_nickname_from_hostmask(self, hostmask):
+    def _get_nickname_from_hostmask(self, hostmask):
         m = re.match('^([^\!]+)', hostmask)
         if not m:
             # FIXME
@@ -226,13 +218,13 @@ class SMS900():
 
         mms_summary, summary_contains_all = self._get_mms_summary(base_url, files)
         if mms_summary:
-            self.send_privmsg(
+            self._send_privmsg(
                 self.config['channel'],
                 "[MMS] <%s> %s" % (sender, mms_summary)
             )
 
         if not summary_contains_all:
-            self.send_privmsg(
+            self._send_privmsg(
                 self.config['channel'],
                 "Received %d file(s): %s" % (len(files), base_url)
             )
