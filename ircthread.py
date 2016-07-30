@@ -34,14 +34,13 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
         hostmask = _hostmask.decode("utf-8", "ignore")
 
         cmd_dispatch = {
-            'stats': self.handle_cmd_stats,
             's':     self.handle_cmd_s,
             'a':     self.handle_cmd_a,
             'd':     self.handle_cmd_d,
             'h':     self.handle_cmd_h,
             'l':     self.handle_cmd_l
             }
-        m = re.match('^\!(stats|s|a|d|h|l)( .*|$)', msg, re.UNICODE)
+        m = re.match('^\!(s|a|d|h|l)( .*|$)', msg, re.UNICODE)
         if m:
             args = m.group(2)
             cmd_dispatch[m.group(1).strip()](hostmask, chan, args)
@@ -64,11 +63,6 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
     def welcome(self, a, b, c):
         logging.info("(001) Welcome: %s/%s/%s" % (a, b, c))
         self.client.send("JOIN %s" % self.channel)
-
-    def handle_cmd_stats(self, hostmask, chan, cmd):
-        self._add_event('SHOW_STATS', {
-            'hostmask' : hostmask
-        })
 
     def handle_cmd_l(self, hostmask, chan, cmd):
         logging.info('s! %s %s %s' % (hostmask, chan, cmd))
@@ -135,7 +129,7 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
 
 
     def handle_cmd_h(self, hostmask, chan, cmd):
-        helpers.msg(self.cli, chan, 'Commands: stats, s(end message), a(add contact), d(elete contact), l(ookup), h(elp)')
+        helpers.msg(self.cli, chan, 'Commands: s(end message), a(add contact), d(elete contact), l(ookup), h(elp)')
 
     def _add_event(self, event_type, data):
         event = {'event_src': 'IRC', 'event_type': event_type}

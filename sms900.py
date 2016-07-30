@@ -14,7 +14,6 @@ from twilio.rest.lookups import TwilioLookupsClient
 import sqlite3
 
 from phonebook import PhoneBook, SMS900InvalidAddressbookEntry
-from stats import SMSStats
 from ircthread import IRCThread
 from http_interface import HTTPThread
 from tele2mms.mmsfetcher import MMSFetcher
@@ -27,7 +26,6 @@ class SMS900():
         self.load_configuration(configuration_path)
         self.init_database()
         self.pb = PhoneBook(self.dbconn)
-        self.stats = SMSStats(self.dbconn)
         self.events = queue.Queue();
 
     def load_configuration(self, configuration_path):
@@ -41,17 +39,6 @@ class SMS900():
         c = self.dbconn.cursor()
 
         try:
-            c.execute(
-                "create table smslog ("
-                "  id integer primary key,"
-                "  timestamp integer,"
-                "  sender text,"
-                "  recipient text,"
-                "  contents text,"
-                "  direction text,"
-                " sms_count integer"
-                ")"
-            )
             c.execute(
                 "create table phonebook ("
                 "  id integer primary key,"
@@ -125,11 +112,6 @@ class SMS900():
 
             self.pb.del_entry(nickname)
             self.send_privmsg(self.config['channel'], 'Removed contact %s (number: %s)' % (nickname, oldnumber))
-        elif event['event_type'] == 'SHOW_STATS':
-            msgs = self.generate_stats()
-            for msg in msgs:
-                self.send_privmsg(self.config['channel'], msg)
-
         elif event['event_type'] == 'LOOKUP_NUMBER':
             number = event['number']
             number = self.canonicalize_number(number)
@@ -151,15 +133,6 @@ class SMS900():
             msg = '<%s> %s' % (sender, sms_msg)
             self.send_privmsg(self.config['channel'], msg)
 
-            message_logged = self.stats.log_incoming_message(number, sms_msg)
-            if not message_logged:
-                self.send_privmsg(self.config['channel'], "Error when logging message: %s" % e)
-
-    def generate_stats(self):
-        stats = self.stats.get_statistics()
-        msg = "Total in: %d, total out: %d" % (stats['total_in'], stats['total_out'])
-        return [msg]
-
     def send_sms(self, number, message, sender_hm):
         logging.info('Sending sms ( %s -> %s )' % (message, number))
 
@@ -175,16 +148,6 @@ class SMS900():
                 self.config['channel'],
                 "Sent %s sms to number %s" % (message_data.num_segments, number)
             )
-
-            message_logged = self.stats.log_outgoing_message(
-                sender_hm,
-                number,
-                message,
-                int(message_data.num_segments)
-            )
-            if not message_logged:
-                self.send_privmsg(self.config['channel'], "Failed to log outgoing sms: %s" % e)
-
         except twilio.TwilioRestException as e:
             self.send_privmsg(self.config['channel'], "Failed to send sms: %s" % e)
 
