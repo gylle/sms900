@@ -26,25 +26,6 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
         super(IRCThreadCallbackHandler, self).__init__(client)
         self.cli = client
 
-    def privmsg(self, _hostmask, _chan, _msg):
-        logging.info("%s in %s said: %s" % (_hostmask, _chan, _msg))
-
-        msg = _msg.decode("utf-8", "ignore")
-        chan = _chan.decode("utf-8", "ignore")
-        hostmask = _hostmask.decode("utf-8", "ignore")
-
-        cmd_dispatch = {
-            's':     self.handle_cmd_s,
-            'a':     self.handle_cmd_a,
-            'd':     self.handle_cmd_d,
-            'h':     self.handle_cmd_h,
-            'l':     self.handle_cmd_l
-            }
-        m = re.match('^\!(s|a|d|h|l)( .*|$)', msg, re.UNICODE)
-        if m:
-            args = m.group(2)
-            cmd_dispatch[m.group(1).strip()](hostmask, chan, args)
-
     def ping(self, prefix, server):
         logging.info("PING/%s/%s" % (prefix, server))
         self.client.send("PONG", server)
@@ -64,7 +45,26 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
         logging.info("(001) Welcome: %s/%s/%s" % (a, b, c))
         self.client.send("JOIN %s" % self.channel)
 
-    def handle_cmd_l(self, hostmask, chan, cmd):
+    def privmsg(self, _hostmask, _chan, _msg):
+        logging.info("%s in %s said: %s" % (_hostmask, _chan, _msg))
+
+        msg = _msg.decode("utf-8", "ignore")
+        chan = _chan.decode("utf-8", "ignore")
+        hostmask = _hostmask.decode("utf-8", "ignore")
+
+        cmd_dispatch = {
+            's':     self._parse_cmd_s,
+            'a':     self._parse_cmd_a,
+            'd':     self._parse_cmd_d,
+            'h':     self._parse_cmd_h,
+            'l':     self._parse_cmd_l
+            }
+        m = re.match('^\!(s|a|d|h|l)( .*|$)', msg, re.UNICODE)
+        if m:
+            args = m.group(2)
+            cmd_dispatch[m.group(1).strip()](hostmask, chan, args)
+
+    def _parse_cmd_l(self, hostmask, chan, cmd):
         logging.info('s! %s %s %s' % (hostmask, chan, cmd))
 
         m = re.match('^\s*(\S+)$', cmd, re.UNICODE)
@@ -74,12 +74,12 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
 
         number = m.group(1)
 
-        self._add_event('LOOKUP_NUMBER', {
+        self.sms900.queue_event('LOOKUP_NUMBER', {
             'hostmask' : hostmask,
             'number' : number
         })
 
-    def handle_cmd_s(self, hostmask, chan, cmd):
+    def _parse_cmd_s(self, hostmask, chan, cmd):
         logging.info('s! %s %s %s' % (hostmask, chan, cmd))
 
         m = re.match('^\s*(\S+)\s+(.+)', cmd, re.UNICODE)
@@ -90,13 +90,13 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
         destination = m.group(1)
         msg = m.group(2)
 
-        self._add_event('SEND_SMS', {
+        self.sms900.queue_event('SEND_SMS', {
             'hostmask' : hostmask,
             'number' : destination,
             'msg' : msg
         })
 
-    def handle_cmd_a(self, hostmask, chan, cmd):
+    def _parse_cmd_a(self, hostmask, chan, cmd):
         logging.info('s! %s %s %s' % (hostmask, chan, cmd))
 
         m = re.match('^\s*(\S+)\s+(\S+)\s*$', cmd, re.UNICODE)
@@ -107,13 +107,13 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
         nickname = m.group(1)
         number = m.group(2)
 
-        self._add_event('ADD_PB_ENTRY', {
+        self.sms900.queue_event('ADD_PB_ENTRY', {
             'hostmask' : hostmask,
             'nickname' : nickname,
             'number' : number
         })
 
-    def handle_cmd_d(self, hostmask, chan, cmd):
+    def _parse_cmd_d(self, hostmask, chan, cmd):
         logging.info('s! %s %s %s' % (hostmask, chan, cmd))
 
         m = re.match('^\s*(\S+)\s*$', cmd, re.UNICODE)
@@ -122,19 +122,14 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
             return
         nickname = m.group(1)
 
-        self._add_event('DEL_PB_ENTRY', {
+        self.sms900.queue_event('DEL_PB_ENTRY', {
             'hostmask' : hostmask,
             'nickname' : nickname
         })
 
 
-    def handle_cmd_h(self, hostmask, chan, cmd):
+    def _parse_cmd_h(self, hostmask, chan, cmd):
         helpers.msg(self.cli, chan, 'Commands: s(end message), a(add contact), d(elete contact), l(ookup), h(elp)')
-
-    def _add_event(self, event_type, data):
-        event = {'event_src': 'IRC', 'event_type': event_type}
-        event.update(data)
-        self.sms900.add_event(event)
 
 class IRCThread(Thread):
     PING_INTERVAL = 60

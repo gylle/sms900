@@ -32,10 +32,10 @@ class SMSHTTPCallbackHandler(http.server.BaseHTTPRequestHandler):
         logging.info("Sms from: %s" % sender)
         logging.info("Sms content: %s" % msg)
 
-        self.sms900.add_event({'event_src': 'SMS',
-                               'event_type': 'SMS_RECEIVED',
-                               'number': sender,
-                               'msg': msg})
+        self.sms900.queue_event('SMS_RECEIVED', {
+            'number': sender,
+            'msg': msg
+        })
 
         self._generate_response(
             200,

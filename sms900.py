@@ -69,17 +69,46 @@ class SMS900():
             event = self.events.get()
             self.handle_event(event)
 
-    def add_event(self, event):
-        self.events.put(event)
-
     def handle_event(self, event):
         try:
-            if event['event_src'] == 'IRC':
-                self.handle_irc_event(event)
-            elif event['event_src'] == 'SMS':
-                self.handle_sms_event(event)
-            else:
-                logging.info('UNKNOWN EVENT: %s' % event)
+            logging.info('EVENT: %s' % event)
+
+            if event['event_type'] == 'SEND_SMS':
+                sender_hm = event['hostmask']
+                number = self.parse_sms_target(event['number'])
+                nickname = self.get_nickname_from_hostmask(sender_hm)
+                # FIXME: Check the sender
+                msg = "<%s> %s" % (nickname, event['msg'])
+
+                self.send_sms(number, msg, sender_hm, )
+            elif event['event_type'] == 'ADD_PB_ENTRY':
+                number = self.canonicalize_number(event['number'])
+                nickname = event['nickname']
+
+                self.pb.add_number(nickname, number)
+                self.send_privmsg(self.config['channel'], 'Added %s with number %s' % (nickname, number))
+            elif event['event_type'] == 'DEL_PB_ENTRY':
+                nickname = event['nickname']
+                oldnumber = self.pb.get_number(nickname)
+
+                self.pb.del_entry(nickname)
+                self.send_privmsg(self.config['channel'], 'Removed contact %s (number: %s)' % (nickname, oldnumber))
+            elif event['event_type'] == 'LOOKUP_NUMBER':
+                number = event['number']
+                number = self.canonicalize_number(number)
+                self.lookup_carrier(number)
+            elif event['event_type'] == 'SMS_RECEIVED':
+                number = event['number']
+                sms_msg = event['msg']
+                sender = self.lookup_nickname(number)
+
+                m = re.search('ett MMS.+hamtamms.+koden ([^ ]+)', event['msg'])
+                if m:
+                    self._download_mms(sender, m.group(1))
+                    return
+
+                msg = '<%s> %s' % (sender, sms_msg)
+                self.send_privmsg(self.config['channel'], msg)
 
         except SMS900InvalidNumberFormatException as e:
             self.send_privmsg(self.config['channel'], "Error: %s" % e)
@@ -89,49 +118,10 @@ class SMS900():
             self.send_privmsg(self.config['channel'], "Unknown error: %s" % e)
             traceback.print_exc()
 
-    def handle_irc_event(self, event):
-        logging.info('EVENT from irc: %s' % event)
-
-        if event['event_type'] == 'SEND_SMS':
-            sender_hm = event['hostmask']
-            number = self.lookup_number(event['number'])
-            nickname = self.get_nickname_from_hostmask(sender_hm)
-            # FIXME: Check the sender
-            msg = "<%s> %s" % (nickname, event['msg'])
-
-            self.send_sms(number, msg, sender_hm, )
-        elif event['event_type'] == 'ADD_PB_ENTRY':
-            number = self.canonicalize_number(event['number'])
-            nickname = event['nickname']
-
-            self.pb.add_number(nickname, number)
-            self.send_privmsg(self.config['channel'], 'Added %s with number %s' % (nickname, number))
-        elif event['event_type'] == 'DEL_PB_ENTRY':
-            nickname = event['nickname']
-            oldnumber = self.pb.get_number(nickname)
-
-            self.pb.del_entry(nickname)
-            self.send_privmsg(self.config['channel'], 'Removed contact %s (number: %s)' % (nickname, oldnumber))
-        elif event['event_type'] == 'LOOKUP_NUMBER':
-            number = event['number']
-            number = self.canonicalize_number(number)
-            self.lookup_carrier(number)
-
-    def handle_sms_event(self, event):
-        logging.info('EVENT from SMS: %s' % event)
-
-        if event['event_type'] == 'SMS_RECEIVED':
-            number = event['number']
-            sms_msg = event['msg']
-            sender = self.lookup_nickname(number)
-
-            m = re.search('ett MMS.+hamtamms.+koden ([^ ]+)', event['msg'])
-            if m:
-                self._download_mms(sender, m.group(1))
-                return
-
-            msg = '<%s> %s' % (sender, sms_msg)
-            self.send_privmsg(self.config['channel'], msg)
+    def queue_event(self, event_type, data):
+        event = {'event_type': event_type}
+        event.update(data)
+        self.events.put(event)
 
     def send_sms(self, number, message, sender_hm):
         logging.info('Sending sms ( %s -> %s )' % (message, number))
@@ -186,7 +176,7 @@ class SMS900():
 
         raise SMS900InvalidNumberFormatException("%s is not a valid number" % number)
 
-    def lookup_number(self, number_or_name):
+    def parse_sms_target(self, number_or_name):
         try:
             number_or_name = self.canonicalize_number(number_or_name)
 
