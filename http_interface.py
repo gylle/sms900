@@ -19,6 +19,11 @@ class SMSHTTPCallbackHandler(http.server.BaseHTTPRequestHandler):
             self._handle_incoming_sms()
             return
 
+        m = re.match('^/api/github/webhook$', self.path)
+        if m:
+            self._handle_github_webhook()
+            return
+
         self._error()
 
     def _handle_incoming_sms(self):
@@ -41,6 +46,15 @@ class SMSHTTPCallbackHandler(http.server.BaseHTTPRequestHandler):
             200,
             b'<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
         )
+
+    def _handle_github_webhook(self):
+        data = self._get_post_data()
+
+        self.sms900.queue_event('GITHUB_WEBHOOK', {
+            'data': data
+        })
+
+        self._generate_response(200, b'Ok')
 
     def _get_post_data(self):
         length = int(self.headers['Content-Length'])

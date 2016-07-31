@@ -36,7 +36,7 @@ class SMS900():
         self.dbconn = None
         self.irc_thread = None
         self.pb = None
-        
+
     def run(self):
         """ Starts the main loop"""
         self._load_configuration()
@@ -133,6 +133,8 @@ class SMS900():
 
                 msg = '<%s> %s' % (sender, sms_msg)
                 self._send_privmsg(self.config['channel'], msg)
+            elif event['event_type'] == 'GITHUB_WEBHOOK':
+                self._handle_github_event(event['data'])
 
         except (SMS900InvalidNumberFormatException,
                 SMS900InvalidAddressbookEntry) as err:
@@ -284,3 +286,21 @@ class SMS900():
             traceback.print_exc()
 
         return None, False
+
+    def _handle_github_event(self, data):
+        try:
+            payload = data['payload']
+            repository_name = payload['repository']['full_name']
+
+            for commit in payload['commits']:
+                self._send_privmsg(
+                    self.config['channel'],
+                    "[%s] %s (%s)" % (
+                        repository_name,
+                        commit['message'],
+                        commit['author']['username']
+                    )
+                )
+
+        except KeyError as err:
+            logging.exception("Failed to parse data from github webhook")
