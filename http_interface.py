@@ -1,4 +1,5 @@
 import http.server
+import json
 import logging
 import re
 import socketserver
@@ -48,7 +49,7 @@ class SMSHTTPCallbackHandler(http.server.BaseHTTPRequestHandler):
         )
 
     def _handle_github_webhook(self):
-        data = self._get_post_data()
+        data = self._get_json_post_data()
 
         self.sms900.queue_event('GITHUB_WEBHOOK', {
             'data': data
@@ -59,6 +60,10 @@ class SMSHTTPCallbackHandler(http.server.BaseHTTPRequestHandler):
     def _get_post_data(self):
         length = int(self.headers['Content-Length'])
         return urllib.parse.parse_qs(self.rfile.read(length).decode('utf-8'))
+
+    def _get_json_post_data(self):
+        length = int(self.headers['Content-Length'])
+        return json.loads(self.rfile.read(length).decode('utf-8'))
 
     def _error(self):
         self._generate_response(404, b'Error')

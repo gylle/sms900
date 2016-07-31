@@ -289,10 +289,9 @@ class SMS900():
 
     def _handle_github_event(self, data):
         try:
-            payload = data['payload']
-            repository_name = payload['repository']['full_name']
+            repository_name = data['repository']['full_name']
 
-            for commit in payload['commits']:
+            for commit in data['commits']:
                 self._send_privmsg(
                     self.config['channel'],
                     "[%s] %s (%s)" % (
