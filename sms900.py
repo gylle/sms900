@@ -123,7 +123,10 @@ class SMS900():
             elif event['event_type'] == 'SMS_RECEIVED':
                 number = event['number']
                 sms_msg = event['msg']
-                sender = self.pb.get_nickname(number)
+                try:
+                    sender = self.pb.get_nickname(number)
+                except SMS900InvalidAddressbookEntry:
+                    sender = number
 
                 mrex = re.search('ett MMS.+hamtamms.+koden ([^ ]+)',
                                  event['msg'])
