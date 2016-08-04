@@ -235,4 +235,4 @@ class SMS900():
                 )
 
         except KeyError as err:
-            logging.exception("Failed to parse data from github webhook")
+            logging.exception("Failed to parse data from github webhook, reason: %s", err)
