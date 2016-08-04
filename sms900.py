@@ -16,7 +16,6 @@ from twilio.rest.lookups import TwilioLookupsClient
 from phonebook import PhoneBook, SMS900InvalidAddressbookEntry
 from ircthread import IRCThread
 from http_interface import HTTPThread
-from tele2mms.mmsfetcher import MMSFetcher
 
 
 class SMS900InvalidNumberFormatException(Exception):
@@ -128,12 +127,6 @@ class SMS900():
                 except SMS900InvalidAddressbookEntry:
                     sender = number
 
-                mrex = re.search('ett MMS.+hamtamms.+koden ([^ ]+)',
-                                 event['msg'])
-                if mrex:
-                    self._download_mms(sender, mrex.group(1))
-                    return
-
                 msg = '<%s> %s' % (sender, sms_msg)
                 self._send_privmsg(self.config['channel'], msg)
             elif event['event_type'] == 'GITHUB_WEBHOOK':
@@ -226,69 +219,6 @@ class SMS900():
             return hostmask
         else:
             return nick.group(1)
-
-    def _download_mms(self, sender, code):
-        rel_path = str(uuid.uuid4())
-        save_path = path.join(
-            self.config['mms_save_path'],
-            rel_path
-        )
-
-        mkdir(save_path)
-
-        # FIXME: Hack.
-        msisdn = self.config['twilio_number'].replace('+46', '0')
-        fetcher = MMSFetcher(msisdn, code, save_path)
-        files = fetcher.download_all()
-
-        base_url = "%s/%s" % (
-            self.config['external_mms_url'],
-            rel_path
-        )
-
-        mms_summary, summary_contains_all = self._get_mms_summary(base_url, files)
-        if mms_summary:
-            self._send_privmsg(
-                self.config['channel'],
-                "[MMS] <%s> %s" % (sender, mms_summary)
-            )
-
-        if not summary_contains_all:
-            self._send_privmsg(
-                self.config['channel'],
-                "Received %d file(s): %s" % (len(files), base_url)
-            )
-
-    def _get_mms_summary(self, base_url, files):
-        try:
-            text = None
-            img_url = None
-
-            # Find the first text and the first image file, if any
-            for full_path in files:
-                match = re.search(r'\.([^.]+)$', full_path)
-                if match:
-                    if not img_url:
-                        if match.group(1) in ['jpg', 'jpeg', 'png']:
-                            filename = path.basename(full_path)
-                            img_url = "%s/%s" % (base_url, filename)
-
-                    if not text:
-                        if match.group(1) in ['txt']:
-                            with open(full_path, 'r', encoding='utf-8',
-                                      errors='ignore') as file:
-                                text = file.read()
-
-            if text or img_url:
-                parts = [text, img_url]
-                message = ", ".join([p for p in parts if p])
-                summary_contains_all = (len(parts) == len(files))
-                return message, summary_contains_all
-
-        except Exception:
-            traceback.print_exc()
-
-        return None, False
 
     def _handle_github_event(self, data):
         try:
