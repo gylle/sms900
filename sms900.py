@@ -158,7 +158,7 @@ class SMS900():
                                % (message_data.num_segments, number))
         except twilio.TwilioRestException as err:
             self._send_privmsg(self.config['channel'],
-                               ("Failed to send sms: %s", err))
+                               "Failed to send sms: %s" % err)
 
     def _lookup_carrier(self, number):
         logging.info('Looking up number %s', number)
