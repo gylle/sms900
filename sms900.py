@@ -131,6 +131,8 @@ class SMS900():
                 self._send_privmsg(self.config['channel'], msg)
             elif event['event_type'] == 'GITHUB_WEBHOOK':
                 self._handle_github_event(event['data'])
+            elif event['event_type'] == 'MAILGUN_INCOMING':
+                self._handle_incoming_mms(event['data'])
 
         except (SMS900InvalidNumberFormatException,
                 SMS900InvalidAddressbookEntry) as err:
@@ -236,3 +238,152 @@ class SMS900():
 
         except KeyError as err:
             logging.exception("Failed to parse data from github webhook, reason: %s", err)
+
+    def _handle_incoming_mms(self, data):
+        rel_path = str(uuid.uuid4())
+        save_path = path.join(
+            self.config['mms_save_path'],
+            rel_path
+        )
+
+        mkdir(save_path)
+
+        [sender, files] = self._parse_mms_data(data, save_path)
+
+        # FIXME: 46..
+        m = re.match('^[^<]*<?46([0-9]+)\@', sender)
+        if m:
+            try:
+                number = self._get_canonicalized_number("0" + m.group(1))
+                sender = self.pb.get_nickname(number)
+            except SMS900InvalidAddressbookEntry:
+                logging.exception("No number found for %s" , m.group(1))
+            except SMS900InvalidNumberFormatException:
+                logging.exception("Weirdly formatted number: %s", m.group(1))
+
+        base_url = "%s/%s" % (
+            self.config['external_mms_url'],
+            rel_path
+        )
+
+        mms_summary, summary_contains_all = self._get_mms_summary(base_url, files)
+        if mms_summary:
+            self._send_privmsg(
+                self.config['channel'],
+                "[MMS] <%s> %s" % (sender, mms_summary)
+            )
+
+        if not summary_contains_all:
+            self._send_privmsg(
+                self.config['channel'],
+                "Received %d file(s): %s" % (len(files), base_url)
+            )
+
+
+    def _parse_mms_data(self, data, save_path):
+        payload = data['payload']
+        files = []
+
+        i = 0
+
+        sender = None
+
+        if data['type'] == 'form-data':
+            for part in payload.parts:
+                disposition = part.headers[b'Content-Disposition'].decode('utf-8', 'ignore')
+
+                if 'name="from"' in disposition:
+                    sender = part.content.decode('utf-8', 'ignore')
+                    continue
+
+                elif 'name="body-plain"' in disposition:
+                    filename = path.join(save_path, '%d-body.txt' % i)
+                    i += 1
+
+                    with open(filename, 'w') as f:
+                        f.write(part.content.decode('utf-8', 'ignore'))
+
+                    files.append(filename)
+                    continue
+
+                m = re.search('filename="([^"]+)"', disposition, re.IGNORECASE)
+                if m:
+                    filename = path.join(save_path, '%d-%s' % (i, m.group(1)))
+                    i += 1
+
+                    with open(filename, 'wb') as f:
+                        f.write(part.content)
+
+                    files.append(filename)
+                    continue
+
+                if b'Content-Type' in part.headers:
+                    # Probably something we need to handle better, but
+                    # let's just dump it in a file for now.
+                    filename = path.join(save_path, '%d-unknown' % i)
+                    i += 1
+
+                    with open(filename, 'wb') as f:
+                        f.write(part.content)
+
+                    files.append(filename)
+                    continue
+
+                logging.info("Ignoring: %s" % disposition)
+
+        elif data['type'] == 'urlencoded':
+            if 'sender' in payload:
+                for _sender in payload['sender']:
+                    sender = _sender
+                    break
+
+            if 'body-plain' in payload:
+                for body in payload['body-plain']:
+                    filename = path.join(save_path, '%d-body.txt' % i)
+                    i += 1
+
+                    with open(filename, 'w') as f:
+                        f.write(body)
+
+                    files.append(filename)
+
+        return [sender, files]
+
+    def _get_mms_summary(self, base_url, files):
+        try:
+            text = None
+            img_url = None
+
+            # Find the first text and the first image file, if any
+            for full_path in files:
+                match = re.search(r'\.([^.]+)$', full_path)
+                if match:
+                    if not img_url:
+                        if match.group(1) in ['jpg', 'jpeg', 'png']:
+                            filename = path.basename(full_path)
+                            img_url = "%s/%s" % (base_url, filename)
+
+                    if not text:
+                        if match.group(1) in ['txt']:
+                            with open(full_path, 'r', encoding='utf-8',
+                                      errors='ignore') as file:
+                                text = file.read()
+
+                            # Only show one line
+                            text_lines = text.splitlines()
+                            if len(text_lines):
+                                text = text_lines[0]
+
+                                if len(text_lines) > 1:
+                                    text += " [%d lines]" % len(text_lines)
+
+            if text or img_url:
+                parts = [p for p in [text, img_url] if p]
+                message = ", ".join(parts)
+                summary_contains_all = (len(parts) == len(files))
+                return message, summary_contains_all
+
+        except Exception:
+            traceback.print_exc()
+
+        return None, False

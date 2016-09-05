@@ -7,4 +7,7 @@
     "twilio_number": "+461234567",
     "twilio_account_sid": "123456",
     "twilio_auth_token": "abcdef",
+
+    "mms_save_path": "/srv/mms",
+    "external_mms_url": "http://example.com/mms"
 }

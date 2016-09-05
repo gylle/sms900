@@ -1,8 +1,10 @@
+from requests_toolbelt import MultipartDecoder
 import http.server
 import json
 import logging
 import re
 import socketserver
+import tempfile
 from threading import Thread
 import urllib
 
@@ -23,6 +25,11 @@ class SMSHTTPCallbackHandler(http.server.BaseHTTPRequestHandler):
         m = re.match('^/api/github/webhook$', self.path)
         if m:
             self._handle_github_webhook()
+            return
+
+        m = re.match('^/api/mailgun/incoming$', self.path)
+        if m:
+            self._handle_mailgun_incoming()
             return
 
         self._error()
@@ -57,9 +64,52 @@ class SMSHTTPCallbackHandler(http.server.BaseHTTPRequestHandler):
 
         self._generate_response(200, b'Ok')
 
+    def _handle_mailgun_incoming(self):
+        if 'form-data' in self.headers['Content-Type']:
+            data = {
+                'type': 'form-data',
+                'payload':  self._get_post_multipart()
+            }
+        elif 'x-www-form-urlencoded' in self.headers['Content-Type']:
+            data = {
+                'type': 'urlencoded',
+                'payload': self._get_post_data()
+            }
+        else:
+            logging.error(
+                "Unknown content type %s in mailgun handler" % (
+                    self.headers['Content-Type']
+                )
+            )
+
+            self._generate_response(400, b'Unknown Content-Type')
+            return
+
+        self.sms900.queue_event('MAILGUN_INCOMING', {
+            'data': data
+        })
+
+        self._generate_response(200, b'Ok')
+
     def _get_post_data(self):
         length = int(self.headers['Content-Length'])
         return urllib.parse.parse_qs(self.rfile.read(length).decode('utf-8'))
+
+    def _get_post_multipart(self):
+        length = int(self.headers['Content-Length'])
+        logging.info("Receiving multipart message")
+        data = self.rfile.read(length)
+
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            logging.info("Saving debug data to %s" % f.name)
+
+            f.write(b"POST /api/mailgun/incoming HTTP/1.1\n")
+            for header in self.headers.keys():
+                f.write(("%s: %s\n" % (header, self.headers[header])).encode('utf-8', 'ignore'))
+            f.write(b"\n")
+            f.write(data)
+
+        return MultipartDecoder(data, self.headers['Content-Type'])
 
     def _get_json_post_data(self):
         length = int(self.headers['Content-Length'])
