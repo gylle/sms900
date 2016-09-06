@@ -6,7 +6,7 @@
   <body>
     {% for mms in all_mms %}
         <a href="{{mms['relpath']}}/">
-          <h1>{{mms['ctime']}}</h1>
+          <h1>{{mms['time']}}</h1>
         </a>
         {% for image in mms['images'] %}
         <a href="{{image['relpath']}}">

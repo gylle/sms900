@@ -19,7 +19,7 @@ class Indexer():
         index_path = path.join(base_path, "index.html")
         self._write_file(
             template.render(
-                ctime = mms['ctime'],
+                time = mms['time'],
                 images = mms['images'],
                 texts = mms['texts'],
                 all_files = mms['all_files']
@@ -45,7 +45,7 @@ class Indexer():
 
             all_mms.append(mms)
 
-        all_mms = sorted(all_mms, key = lambda mms: mms['ctime'], reverse = True)
+        all_mms = sorted(all_mms, key = lambda mms: mms['time'], reverse = True)
 
         template = self.env.get_template("global-index.html")
         index_path = path.join(base_path, filename)
@@ -68,7 +68,7 @@ class Indexer():
         images = []
         texts = []
         all_files = []
-        ctime = None
+        time = None
 
         for f in listdir(local_path):
             full_path = path.join(local_path, f)
@@ -78,9 +78,9 @@ class Indexer():
             if f == 'index.html':
                 continue
 
-            if not ctime:
-                ctime = datetime.datetime.fromtimestamp(
-                    path.getctime(full_path)
+            if not time:
+                time = datetime.datetime.fromtimestamp(
+                    path.getmtime(full_path)
                 ).strftime('%Y-%m-%d %H:%M:%S')
 
             file_info = {
@@ -105,7 +105,7 @@ class Indexer():
 
         return {
             'relpath': prepend_path,
-            'ctime': ctime,
+            'time': time,
             'images': images,
             'texts': texts,
             'all_files': all_files
