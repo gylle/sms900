@@ -306,11 +306,15 @@ class SMS900():
                     continue
 
                 elif 'name="body-plain"' in disposition:
+                    contents = part.content.decode('utf-8', 'ignore')
+                    if not len(contents.strip()):
+                        continue
+
                     filename = path.join(save_path, '%d-body.txt' % i)
                     i += 1
 
                     with open(filename, 'w') as f:
-                        f.write(part.content.decode('utf-8', 'ignore'))
+                        f.write(contents)
 
                     files.append(filename)
                     continue
