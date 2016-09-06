@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+  </head>
+  <body>
+    {% for mms in all_mms %}
+        <a href="{{mms['relpath']}}/">
+          <h1>{{mms['ctime']}}</h1>
+        </a>
+        {% for image in mms['images'] %}
+        <a href="{{image['relpath']}}">
+          <img src="{{image['relpath']}}" style="max-width:640px;">
+        </a>
+        <br>
+        {% endfor %}
+        {% for text in mms['texts'] %}
+          {{text}}
+          <br>
+        {% endfor %}
+
+        <hr>
+        All files:<br/>
+        <ul>
+        {% for file in mms['all_files'] %}
+          <li><a href="{{file['relpath']}}">{{file['name']}}</a></li>
+        {% endfor %}
+        </ul>
+      <hr>
+    {% endfor %}
+  </body>
+</html>

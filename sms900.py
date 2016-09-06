@@ -16,6 +16,7 @@ from twilio.rest.lookups import TwilioLookupsClient
 from phonebook import PhoneBook, SMS900InvalidAddressbookEntry
 from ircthread import IRCThread
 from http_interface import HTTPThread
+from indexer import Indexer
 
 
 class SMS900InvalidNumberFormatException(Exception):
@@ -41,6 +42,7 @@ class SMS900():
         self._load_configuration()
         self._init_database()
         self.pb = PhoneBook(self.dbconn)
+        self.indexer = Indexer()
 
         logging.info("Starting IRCThread thread")
         self.irc_thread = IRCThread(self,
@@ -119,6 +121,8 @@ class SMS900():
                 number = event['number']
                 number = self._get_canonicalized_number(number)
                 self._lookup_carrier(number)
+            elif event['event_type'] == 'REINDEX_ALL':
+                self._reindex_all()
             elif event['event_type'] == 'SMS_RECEIVED':
                 number = event['number']
                 sms_msg = event['msg']
@@ -279,6 +283,11 @@ class SMS900():
                 "Received %d file(s): %s" % (len(files), base_url)
             )
 
+        self.indexer.generate_local_index(save_path)
+        self.indexer.generate_global_index(self.config['mms_save_path'])
+
+    def _reindex_all(self):
+        self.indexer.reindex_all(self.config['mms_save_path'])
 
     def _parse_mms_data(self, data, save_path):
         payload = data['payload']

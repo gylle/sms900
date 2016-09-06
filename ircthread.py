@@ -57,9 +57,10 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
             'a':     self._parse_cmd_pb_add,
             'd':     self._parse_cmd_pb_del,
             'h':     self._parse_cmd_help,
-            'l':     self._parse_cmd_lookup_carrier
+            'l':     self._parse_cmd_lookup_carrier,
+            'r':     self._parse_cmd_reindex
             }
-        m = re.match('^\!(s|a|d|h|l)( .*|$)', msg, re.UNICODE)
+        m = re.match('^\!(s|a|d|h|l|r)( .*|$)', msg, re.UNICODE)
         if m:
             args = m.group(2)
             cmd_dispatch[m.group(1).strip()](hostmask, chan, args)
@@ -127,8 +128,22 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
             'number' : number
         })
 
+    def _parse_cmd_reindex(self, hostmask, chan, cmd):
+        logging.info('!r %s, %s, %s' % (hostmask, chan, cmd))
+
+        m = re.match('^\s*$', cmd, re.UNICODE)
+        if not m:
+            helpers.msg(self.cli, chan, 'Usage: !r(eindex all)')
+            return
+
+        self.sms900.queue_event('REINDEX_ALL', {})
+
     def _parse_cmd_help(self, hostmask, chan, cmd):
-        helpers.msg(self.cli, chan, 'Commands: s(end message), a(add contact), d(elete contact), l(ookup), h(elp)')
+        helpers.msg(
+            self.cli,
+            chan,
+            'Commands: s(end message), a(add contact), d(elete contact), l(ookup), r(eindex all), h(elp)'
+        )
 
 class IRCThread(Thread):
     PING_INTERVAL = 60

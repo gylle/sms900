@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>MMS received at {{ ctime }}</title>
+  </head>
+  <body>
+    {% for image in images %}
+      <img src="{{image['relpath']}}" style="max-width:800px;"><br>
+    {% endfor %}
+    {% for text in texts %}
+      {{text}}
+      <br>
+    {% endfor %}
+
+    <hr>
+    All files:<br/>
+    <ul>
+    {% for file in all_files %}
+      <li><a href="{{file['relpath']}}">{{file['name']}}</a></li>
+    {% endfor %}
+    </ul>
+  </body>
+</html>

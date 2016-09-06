@@ -1,3 +1,4 @@
 twilio==5.4.0
 git+https://github.com/gylle/oyoyo
 requests-toolbelt==0.7.0
+jinja2==2.8
