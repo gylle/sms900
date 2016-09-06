@@ -43,6 +43,8 @@ class Indexer():
             if not len(mms['all_files']):
                 continue
 
+            all_mms.append(mms)
+
         all_mms = sorted(all_mms, key = lambda mms: mms['ctime'], reverse = True)
 
         template = self.env.get_template("global-index.html")
