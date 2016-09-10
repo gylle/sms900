@@ -77,6 +77,13 @@ class SMS900():
                 "  number text UNIQUE"
                 ")"
             )
+
+            conn.execute(
+                "create table phonebook_email ("
+                "  email text primary key collate nocase,"
+                "  nickname text"
+                ")"
+            )
         except sqlite3.Error as err:
             logging.info("Failed to create table(s): %s", err)
 
@@ -104,19 +111,37 @@ class SMS900():
 
                 self._send_sms(number, msg)
             elif event['event_type'] == 'ADD_PB_ENTRY':
-                number = self._get_canonicalized_number(event['number'])
                 nickname = event['nickname']
+                if event['number']:
+                    number = self._get_canonicalized_number(event['number'])
 
-                self.pb.add_number(nickname, number)
-                self._send_privmsg(self.config['channel'],
-                                   'Added %s with number %s' % (nickname, number))
+                    self.pb.add_number(nickname, number)
+                    self._send_privmsg(self.config['channel'],
+                                       'Added %s with number %s' % (nickname, number))
+
+                elif event['email']:
+                    email = event['email']
+                    self.pb.add_email(nickname, email)
+                    self._send_privmsg(self.config['channel'],
+                                       'Added email %s for %s' % (email, nickname))
+
             elif event['event_type'] == 'DEL_PB_ENTRY':
-                nickname = event['nickname']
-                oldnumber = self.pb.get_number(nickname)
+                if event['nickname']:
+                    nickname = event['nickname']
+                    oldnumber = self.pb.get_number(nickname)
 
-                self.pb.del_entry(nickname)
-                self._send_privmsg(self.config['channel'],
-                                   'Removed contact %s (number: %s)' % (nickname, oldnumber))
+                    self.pb.del_entry(nickname)
+                    self._send_privmsg(self.config['channel'],
+                                       'Removed contact %s (number: %s)' % (nickname, oldnumber))
+
+                elif event['email']:
+                    email = event['email']
+                    nickname = self.pb.get_nickname_from_email(email)
+
+                    self.pb.del_email(email)
+                    self._send_privmsg(self.config['channel'],
+                                       'Removed %s for contact %s' % (email, nickname))
+
             elif event['event_type'] == 'LOOKUP_CARRIER':
                 number = event['number']
                 number = self._get_canonicalized_number(number)
@@ -254,16 +279,7 @@ class SMS900():
 
         [sender, files] = self._parse_mms_data(data, save_path)
 
-        # FIXME: 46..
-        m = re.match('^[^<]*<?46([0-9]+)\@', sender)
-        if m:
-            try:
-                number = self._get_canonicalized_number("0" + m.group(1))
-                sender = self.pb.get_nickname(number)
-            except SMS900InvalidAddressbookEntry:
-                logging.exception("No number found for %s" , m.group(1))
-            except SMS900InvalidNumberFormatException:
-                logging.exception("Weirdly formatted number: %s", m.group(1))
+        sender = self._map_mms_sender_to_nickname(sender)
 
         base_url = "%s/%s" % (
             self.config['external_mms_url'],
@@ -288,6 +304,30 @@ class SMS900():
 
     def _reindex_all(self):
         self.indexer.reindex_all(self.config['mms_save_path'])
+
+    def _map_mms_sender_to_nickname(self, sender):
+        m = re.match('^([^<]*<)?([^<]+@[^>]+)>?', sender)
+        if not m:
+            return sender
+
+        email = m.group(2)
+
+        try:
+            return self.pb.get_nickname_from_email(email)
+        except SMS900InvalidAddressbookEntry:
+            logging.exception("No nickname found for email %s", email)
+
+        m = re.match('^([0-9]+)\@', email)
+        if m:
+            try:
+                number = self._get_canonicalized_number("+" + m.group(1))
+                return self.pb.get_nickname(number)
+            except SMS900InvalidAddressbookEntry:
+                logging.exception("No number found for %s" , m.group(1))
+            except SMS900InvalidNumberFormatException:
+                logging.exception("Weirdly formatted number: %s", m.group(1))
+
+        return sender
 
     def _parse_mms_data(self, data, save_path):
         payload = data['payload']

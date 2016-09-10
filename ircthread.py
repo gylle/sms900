@@ -87,15 +87,23 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
 
         m = re.match('^\s*(\S+)\s+(\S+)\s*$', cmd, re.UNICODE)
         if not m:
-            helpers.msg(self.cli, chan, 'Usage: !a(dd) contact number')
+            helpers.msg(self.cli, chan, 'Usage: !a(dd) contact <number|email>')
             return
 
         nickname = m.group(1)
-        number = m.group(2)
+
+        email = None
+        number = None
+
+        if '@' in m.group(2):
+            email = m.group(2)
+        else:
+            number = m.group(2)
 
         self.sms900.queue_event('ADD_PB_ENTRY', {
             'hostmask' : hostmask,
             'nickname' : nickname,
+            'email' : email,
             'number' : number
         })
 
@@ -104,13 +112,21 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
 
         m = re.match('^\s*(\S+)\s*$', cmd, re.UNICODE)
         if not m:
-            helpers.msg(self.cli, chan, 'Usage: !d(elete) contact')
+            helpers.msg(self.cli, chan, 'Usage: !d(elete) contact [email]')
             return
-        nickname = m.group(1)
+
+        nickname = None
+        email = None
+
+        if '@' in m.group(1):
+            email = m.group(1)
+        else:
+            nickname = m.group(1)
 
         self.sms900.queue_event('DEL_PB_ENTRY', {
             'hostmask' : hostmask,
-            'nickname' : nickname
+            'nickname' : nickname,
+            'email' : email
         })
 
     def _parse_cmd_lookup_carrier(self, hostmask, chan, cmd):
