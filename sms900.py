@@ -296,7 +296,7 @@ class SMS900():
         if not summary_contains_all:
             self._send_privmsg(
                 self.config['channel'],
-                "Received %d file(s): %s" % (len(files), base_url)
+                "[MMS] <%s> Received %d file(s): %s" % (sender, len(files), base_url)
             )
 
         self.indexer.generate_local_index(save_path)
@@ -411,13 +411,15 @@ class SMS900():
             for full_path in files:
                 match = re.search(r'\.([^.]+)$', full_path)
                 if match:
+                    extension = match.group(1).lower()
+
                     if not img_url:
-                        if match.group(1) in ['jpg', 'jpeg', 'png']:
+                        if extension in ['jpg', 'jpeg', 'png']:
                             filename = path.basename(full_path)
                             img_url = "%s/%s" % (base_url, filename)
 
                     if not text:
-                        if match.group(1) in ['txt']:
+                        if extension in ['txt']:
                             with open(full_path, 'r', encoding='utf-8',
                                       errors='ignore') as file:
                                 text = file.read()

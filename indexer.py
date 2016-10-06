@@ -90,7 +90,7 @@ class Indexer():
 
             all_files.append(file_info)
 
-            ext = path.splitext(f)[1]
+            ext = path.splitext(f)[1].lower()
             if ext in ['.jpg', '.jpeg', '.png', '.gif']:
                 images.append(file_info)
             elif ext in ['.txt']:
