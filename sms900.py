@@ -327,7 +327,7 @@ class SMS900():
             except SMS900InvalidNumberFormatException:
                 logging.exception("Weirdly formatted number: %s", m.group(1))
 
-        return sender
+        return email
 
     def _parse_mms_data(self, data, save_path):
         payload = data['payload']
