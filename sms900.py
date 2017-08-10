@@ -406,15 +406,19 @@ class SMS900():
                 sender = _sender
                 break
 
-        if 'body-plain' in payload:
-            for body in payload['body-plain']:
-                filename = path.join(save_path, '%d-body.txt' % i)
-                i += 1
+        for text_type in ['body-plain', 'subject']:
+            if text_type in payload:
+                for body in payload[text_type]:
+                    if not len(body.strip()):
+                        continue
 
-                with open(filename, 'w') as f:
-                    f.write(body)
+                    filename = path.join(save_path, '%d-%s.txt' % (i, text_type))
+                    i += 1
 
-                files.append(filename)
+                    with open(filename, 'w') as f:
+                        f.write(body)
+
+                    files.append(filename)
 
         return [sender, files]
 
