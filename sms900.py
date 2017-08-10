@@ -421,6 +421,7 @@ class SMS900():
     def _get_mms_summary(self, base_url, files):
         try:
             text = None
+            text_was_cut = False
             img_url = None
 
             # Find the first text and the first image file, if any
@@ -446,12 +447,13 @@ class SMS900():
                                 text = text_lines[0]
 
                                 if len(text_lines) > 1:
+                                    text_was_cut = True
                                     text += " [%d lines]" % len(text_lines)
 
             if text or img_url:
                 parts = [p for p in [text, img_url] if p]
                 message = ", ".join(parts)
-                summary_contains_all = (len(parts) == len(files))
+                summary_contains_all = (len(parts) == len(files)) and not text_was_cut
                 return message, summary_contains_all
 
         except Exception:
