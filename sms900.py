@@ -331,26 +331,36 @@ class SMS900():
 
     def _parse_mms_data(self, data, save_path):
         payload = data['payload']
-        files = []
-
-        i = 0
-
-        sender = None
 
         if data['type'] == 'form-data':
-            for part in payload.parts:
-                disposition = part.headers[b'Content-Disposition'].decode('utf-8', 'ignore')
+            return self._parse_form_mms_data(payload, save_path)
+        elif data['type'] == 'urlencoded':
+            return self._parse_urlencoded_mms_data(payload, save_path)
+        else:
+            return [None, []]
 
-                if 'name="from"' in disposition:
+    def _parse_form_mms_data(self, payload, save_path):
+        files = []
+        sender = None
+        i = 0
+
+        for part in payload.parts:
+            disposition = part.headers[b'Content-Disposition'].decode('utf-8', 'ignore')
+
+            m = re.search('name="([^"]+)"', disposition, re.IGNORECASE)
+            if m:
+                disposition_name = m.group(1)
+
+                if disposition_name == 'from':
                     sender = part.content.decode('utf-8', 'ignore')
                     continue
 
-                elif 'name="body-plain"' in disposition:
+                elif disposition_name in ['body-plain', 'subject']:
                     contents = part.content.decode('utf-8', 'ignore')
                     if not len(contents.strip()):
                         continue
 
-                    filename = path.join(save_path, '%d-body.txt' % i)
+                    filename = path.join(save_path, '%d-%s.txt' % (i, disposition_name))
                     i += 1
 
                     with open(filename, 'w') as f:
@@ -359,46 +369,52 @@ class SMS900():
                     files.append(filename)
                     continue
 
-                m = re.search('filename="([^"]+)"', disposition, re.IGNORECASE)
-                if m:
-                    filename = path.join(save_path, '%d-%s' % (i, m.group(1)))
-                    i += 1
+            m = re.search('filename="([^"]+)"', disposition, re.IGNORECASE)
+            if m:
+                filename = path.join(save_path, '%d-%s' % (i, m.group(1)))
+                i += 1
 
-                    with open(filename, 'wb') as f:
-                        f.write(part.content)
+                with open(filename, 'wb') as f:
+                    f.write(part.content)
 
-                    files.append(filename)
-                    continue
+                files.append(filename)
+                continue
 
-                if b'Content-Type' in part.headers:
-                    # Probably something we need to handle better, but
-                    # let's just dump it in a file for now.
-                    filename = path.join(save_path, '%d-unknown' % i)
-                    i += 1
+            if b'Content-Type' in part.headers:
+                # Probably something we need to handle better, but
+                # let's just dump it in a file for now.
+                filename = path.join(save_path, '%d-unknown' % i)
+                i += 1
 
-                    with open(filename, 'wb') as f:
-                        f.write(part.content)
+                with open(filename, 'wb') as f:
+                    f.write(part.content)
 
-                    files.append(filename)
-                    continue
+                files.append(filename)
+                continue
 
-                logging.info("Ignoring: %s" % disposition)
+            logging.info("Ignoring: %s" % disposition)
 
-        elif data['type'] == 'urlencoded':
-            if 'sender' in payload:
-                for _sender in payload['sender']:
-                    sender = _sender
-                    break
+        return [sender, files]
 
-            if 'body-plain' in payload:
-                for body in payload['body-plain']:
-                    filename = path.join(save_path, '%d-body.txt' % i)
-                    i += 1
+    def _parse_urlencoded_mms_data(self, payload, save_path):
+        files = []
+        sender = None
+        i = 0
 
-                    with open(filename, 'w') as f:
-                        f.write(body)
+        if 'sender' in payload:
+            for _sender in payload['sender']:
+                sender = _sender
+                break
 
-                    files.append(filename)
+        if 'body-plain' in payload:
+            for body in payload['body-plain']:
+                filename = path.join(save_path, '%d-body.txt' % i)
+                i += 1
+
+                with open(filename, 'w') as f:
+                    f.write(body)
+
+                files.append(filename)
 
         return [sender, files]
 
