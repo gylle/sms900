@@ -54,16 +54,20 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
 
         cmd_dispatch = {
             's':     self._parse_cmd_send_sms,
+            'S':     self._parse_cmd_send_sms_to_skatteola,
             'a':     self._parse_cmd_pb_add,
             'd':     self._parse_cmd_pb_del,
             'h':     self._parse_cmd_help,
             'l':     self._parse_cmd_lookup_carrier,
             'r':     self._parse_cmd_reindex
             }
-        m = re.match('^\!(s|a|d|h|l|r)( .*|$)', msg, re.UNICODE)
+        m = re.match('^\!(s|S|a|d|h|l|r)( .*|$)', msg, re.UNICODE)
         if m:
             args = m.group(2)
             cmd_dispatch[m.group(1).strip()](hostmask, chan, args)
+
+    def _parse_cmd_send_sms_to_skatteola(self, hostmask, chan, cmd):
+        return self._parse_cmd_send_sms(hostmask, chan, "skatteola %s" % cmd)
 
     def _parse_cmd_send_sms(self, hostmask, chan, cmd):
         logging.info('s! %s %s %s' % (hostmask, chan, cmd))
