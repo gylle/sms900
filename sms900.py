@@ -53,7 +53,7 @@ class SMS900():
         self.irc_thread.start()
 
         logging.info("Starting webserver")
-        http_thread = HTTPThread(self, ('0.0.0.0', 8090))
+        http_thread = HTTPThread(self, ('0.0.0.0', self.config['http_server_port']))
         http_thread.start()
 
         logging.info("Starting main loop")
