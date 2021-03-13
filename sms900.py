@@ -10,8 +10,8 @@ from os import mkdir, path
 import sqlite3
 
 import twilio
-from twilio.rest import TwilioRestClient
-from twilio.rest.lookups import TwilioLookupsClient
+from twilio.rest import Client
+from twilio.base.exceptions import TwilioRestException
 
 from phonebook import PhoneBook, SMS900InvalidAddressbookEntry
 from ircthread import IRCThread
@@ -175,8 +175,8 @@ class SMS900():
         logging.info('Sending sms ( %s -> %s )', message, number)
 
         try:
-            client = TwilioRestClient(self.config['twilio_account_sid'],
-                                      self.config['twilio_auth_token'])
+            client = Client(self.config['twilio_account_sid'],
+                            self.config['twilio_auth_token'])
 
             message_data = client.messages.create(to=number,
                                                   from_=self.config['twilio_number'],
@@ -185,7 +185,7 @@ class SMS900():
             self._send_privmsg(self.config['channel'],
                                "Sent %s sms to number %s"
                                % (message_data.num_segments, number))
-        except twilio.TwilioRestException as err:
+        except TwilioRestException as err:
             self._send_privmsg(self.config['channel'],
                                "Failed to send sms: %s" % err)
 
@@ -193,18 +193,17 @@ class SMS900():
         logging.info('Looking up number %s', number)
 
         try:
-            client = TwilioLookupsClient(self.config['twilio_account_sid'],
-                                         self.config['twilio_auth_token'])
+            client = Client(self.config['twilio_account_sid'],
+                            self.config['twilio_auth_token'])
 
-            number_data = client.phone_numbers.get(number,
-                                                   include_carrier_info=True)
+            number_data = client.lookups.v1.phone_numbers(number).fetch(type=['carrier'])
 
             self._send_privmsg(self.config['channel'],
                                '%s is %s, carrier: %s'
                                % (number,
                                   number_data.carrier['type'],
                                   number_data.carrier['name']))
-        except twilio.TwilioRestException as err:
+        except TwilioRestException as err:
             self._send_privmsg(self.config['channel'],
                                "Failed to lookup number: %s" % err)
 
@@ -226,8 +225,7 @@ class SMS900():
                          new_number)
             return new_number
 
-        raise SMS900InvalidNumberFormatException("%s is not a valid number",
-                                                 number)
+        raise SMS900InvalidNumberFormatException("%s is not a valid number" % number)
 
     def _get_num_from_nick_or_num(self, number_or_name):
         try:
