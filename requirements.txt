@@ -1,4 +1,4 @@
 twilio==6.*
 git+https://github.com/gylle/oyoyo
-requests-toolbelt==0.7.0
-jinja2==2.10.1
+requests-toolbelt==0.9.*
+jinja2==2.11.*
