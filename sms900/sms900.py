@@ -13,10 +13,10 @@ import twilio
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
 
-from phonebook import PhoneBook, SMS900InvalidAddressbookEntry
-from ircthread import IRCThread
-from http_interface import HTTPThread
-from indexer import Indexer
+from sms900.phonebook import PhoneBook, SMS900InvalidAddressbookEntry
+from sms900.ircthread import IRCThread
+from sms900.http_interface import HTTPThread
+from sms900.indexer import Indexer
 
 
 class SMS900InvalidNumberFormatException(Exception):

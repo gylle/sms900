@@ -3,7 +3,7 @@
 import argparse
 import logging
 
-from sms900 import SMS900
+from sms900.sms900 import SMS900
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s:%(funcName)-30s:%(levelname)-8s %(message)s',
