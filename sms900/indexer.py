@@ -1,6 +1,6 @@
 """ Create indexes for the on-disk media files """
-import cgi
 import datetime
+import html
 import logging
 from os import listdir, path
 
@@ -96,7 +96,7 @@ class Indexer():
             elif ext in ['.txt']:
                 try:
                     with open(full_path, 'r') as f:
-                        data = cgi.escape(f.read())
+                        data = html.escape(f.read())
                         texts.append(
                             "<br>".join(data.splitlines())
                         )
