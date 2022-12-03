@@ -39,7 +39,7 @@ class SMS900():
         self.irc_thread = None
         self.pb = None
         self.openai = None
-        self.history = deque(maxlen=10)
+        self.openai_history = deque(maxlen=20)
 
     def run(self):
         """ Starts the main loop"""
@@ -110,13 +110,13 @@ class SMS900():
     def on_privmsg_received(self, hostmask, channel, msg):
         nickname = self._get_nickname_from_hostmask(hostmask)
 
-        self.history.append({
-            'nickname': nickname,
-            'channel': channel,
-            'msg': msg,
-        })
 
         if not msg.startswith('!') and self.config['nickname'] in msg:
+            self.openai_history.append({
+                'nickname': nickname,
+                'channel': channel,
+                'msg': msg,
+            })
             self.queue_event('NICK_MENTIONED', {"something": "else"})
 
     def openai_set_prompt(self, prompt):
@@ -196,9 +196,15 @@ class SMS900():
                     response = self.openai.generate_response(
                         self.config['channel'],
                         self.config['nickname'],
-                        self.history
+                        self.openai_history
                     )
                     if response:
+                        self.openai_history.append({
+                            'nickname': self.config['nickname'],
+                            'channel': self.config['channel'],
+                            'msg': response,
+                        })
+
                         self._send_privmsg(self.config['channel'], response)
                 else:
                     logging.info("openai not configured")
@@ -248,12 +254,6 @@ class SMS900():
                                "Failed to lookup number: %s" % err)
 
     def _send_privmsg(self, target, msg):
-        self.history.append({
-            'nickname': self.config['nickname'],
-            'channel': self.config['channel'],
-            'msg': msg,
-        })
-
         self.irc_thread.send_privmsg(target, msg)
 
     def _get_canonicalized_number(self, number):
