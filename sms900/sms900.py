@@ -245,6 +245,12 @@ class SMS900():
                                "Failed to lookup number: %s" % err)
 
     def _send_privmsg(self, target, msg):
+        self.history.append({
+            'nickname': self.config['nickname'],
+            'channel': self.config['channel'],
+            'msg': msg,
+        })
+
         self.irc_thread.send_privmsg(target, msg)
 
     def _get_canonicalized_number(self, number):

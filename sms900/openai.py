@@ -41,7 +41,7 @@ class OpenAI():
                 max_tokens=256,
             )
 
-            return completion.choices[0].text
+            return completion.choices[0].text.strip()
         except Exception as err:
             logging.info("Failed to create completion: %s", err)
             return None
