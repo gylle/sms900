@@ -119,6 +119,9 @@ class SMS900():
         if not msg.startswith('!') and self.config['nickname'] in msg:
             self.queue_event('NICK_MENTIONED', {"something": "else"})
 
+    def openai_set_prompt(self, prompt):
+        self.openai.set_prompt(prompt)
+
     def _main_loop(self):
         while True:
             event = self.events.get()

@@ -8,6 +8,8 @@ class OpenAI():
         self.config_engine = config_engine
         self.config_prompt = config_prompt
 
+    def set_prompt(self, new_config_prompt):
+        self.config_prompt = new_config_prompt
 
     def generate_response(self, channel, my_nickname, history):
         prompt_to_complete = self.generate_prompt(channel, my_nickname, history)

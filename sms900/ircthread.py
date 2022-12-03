@@ -61,9 +61,10 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
             'd':     self._parse_cmd_pb_del,
             'h':     self._parse_cmd_help,
             'l':     self._parse_cmd_lookup_carrier,
-            'r':     self._parse_cmd_reindex
+            'r':     self._parse_cmd_reindex,
+            'p':     self._parse_cmd_prompt,
             }
-        m = re.match('^\!(s|S|a|d|h|l|r)( .*|$)', msg, re.UNICODE)
+        m = re.match('^\!(s|S|a|d|h|l|r|p)( .*|$)', msg, re.UNICODE)
         if m:
             args = m.group(2)
             cmd_dispatch[m.group(1).strip()](hostmask, chan, args)
@@ -159,6 +160,17 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
             return
 
         self.sms900.queue_event('REINDEX_ALL', {})
+
+    def _parse_cmd_prompt(self, hostmask, chan, cmd):
+        logging.info('!p %s, %s, %s' % (hostmask, chan, cmd))
+
+        new_prompt = cmd.strip();
+        if not new_prompt:
+            helpers.msg(self.cli, chan, 'Usage: !p(rompt) <text>')
+            return
+
+        self.sms900.openai_set_prompt(new_prompt)
+        helpers.msg(self.cli, chan, 'Kashikomarimashita')
 
     def _parse_cmd_help(self, hostmask, chan, cmd):
         helpers.msg(
