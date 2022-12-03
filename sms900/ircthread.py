@@ -52,6 +52,8 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
         chan = _chan.decode("utf-8", "ignore")
         hostmask = _hostmask.decode("utf-8", "ignore")
 
+        self.sms900.on_privmsg_received(hostmask, chan, msg)
+
         cmd_dispatch = {
             's':     self._parse_cmd_send_sms,
             'S':     self._parse_cmd_send_sms_to_skatteola,

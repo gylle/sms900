@@ -9,6 +9,10 @@
     "twilio_account_sid": "123456",
     "twilio_auth_token": "abcdef",
 
+    "openai_api_key": "abc",
+    "openai_engine": "text-davinci-003",
+    "openai_prompt": "You're very helpful but also very annoyed at everyone.",
+
     "mms_save_path": "/srv/sms900",
     "external_mms_url": "http://example.com/mms"
 }

@@ -1,4 +1,5 @@
 """ The main bot module for sms900 """
+from collections import deque
 import json
 import logging
 import queue
@@ -17,6 +18,7 @@ from sms900.phonebook import PhoneBook, SMS900InvalidAddressbookEntry
 from sms900.ircthread import IRCThread
 from sms900.http_interface import HTTPThread
 from sms900.indexer import Indexer
+from sms900.openai import OpenAI
 
 
 class SMS900InvalidNumberFormatException(Exception):
@@ -36,6 +38,8 @@ class SMS900():
         self.dbconn = None
         self.irc_thread = None
         self.pb = None
+        self.openai = None
+        self.history = deque(maxlen=10)
 
     def run(self):
         """ Starts the main loop"""
@@ -51,6 +55,16 @@ class SMS900():
                                     self.config['nickname'],
                                     self.config['channel'])
         self.irc_thread.start()
+
+        try:
+            if 'openai_api_key' in self.config:
+                self.openai = OpenAI(
+                    self.config['openai_api_key'],
+                    self.config['openai_engine'],
+                    self.config['openai_prompt'] if 'openai_prompt' in self.config else ''
+                )
+        except Exception as err:
+            logging.info("Failed to initialize openai: %s", err)
 
         logging.info("Starting webserver")
         http_thread = HTTPThread(self, ('0.0.0.0', self.config['http_server_port']))
@@ -92,6 +106,18 @@ class SMS900():
         event = {'event_type': event_type}
         event.update(data)
         self.events.put(event)
+
+    def on_privmsg_received(self, hostmask, channel, msg):
+        nickname = self._get_nickname_from_hostmask(hostmask)
+
+        self.history.append({
+            'nickname': nickname,
+            'channel': channel,
+            'msg': msg,
+        })
+
+        if not msg.startswith('!') and self.config['nickname'] in msg:
+            self.queue_event('NICK_MENTIONED', {"something": "else"})
 
     def _main_loop(self):
         while True:
@@ -162,6 +188,17 @@ class SMS900():
                 self._handle_github_event(event['data'])
             elif event['event_type'] == 'MAILGUN_INCOMING':
                 self._handle_incoming_mms(event['data'])
+            elif event['event_type'] == 'NICK_MENTIONED':
+                if self.openai:
+                    response = self.openai.generate_response(
+                        self.config['channel'],
+                        self.config['nickname'],
+                        self.history
+                    )
+                    if response:
+                        self._send_privmsg(self.config['channel'], response)
+                else:
+                    logging.info("openai not configured")
 
         except (SMS900InvalidNumberFormatException,
                 SMS900InvalidAddressbookEntry) as err:
