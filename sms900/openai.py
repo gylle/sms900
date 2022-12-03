@@ -20,6 +20,8 @@ class OpenAI():
     def generate_prompt(self, channel, my_nickname, history):
         prompt = (
             "You're on an IRC channel called {channel} and your nickname is {nick}. "
+            + "You have the ability to send SMS by writing '|SMS:recipient:message|', including the '|'. "
+            + "If you want to send SMS to multiple people, you need to write the command multiple times. "
             + (self.override_prompt if self.override_prompt else self.config_prompt)
         ).format(channel=channel, nick=my_nickname).strip()
 

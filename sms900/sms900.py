@@ -211,6 +211,8 @@ class SMS900():
                             'msg': response,
                         })
 
+                        self._openai_parse_response_commands(response)
+
                         self._send_privmsg(self.config['channel'], response)
                 else:
                     logging.info("openai not configured")
@@ -235,6 +237,16 @@ class SMS900():
                        if self.config['nickname'] in x['msg'] or x['nickname'] == self.config['nickname']]
 
         return context[-limit:]
+
+    def _openai_parse_response_commands(self, response):
+        m = re.findall(r'\|SMS:([^:]+):([^|]+)\|', response)
+        for sms in m:
+            self.queue_event('SEND_SMS', {
+                'hostmask': 'sms900!fakehostmask',
+                'number': sms[0],
+                'msg': sms[1],
+            })
+
 
     def _send_sms(self, number, message):
         logging.info('Sending sms ( %s -> %s )', message, number)
