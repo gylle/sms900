@@ -39,7 +39,7 @@ class SMS900():
         self.irc_thread = None
         self.pb = None
         self.openai = None
-        self.openai_history = deque(maxlen=20)
+        self.openai_history = deque(maxlen=100)
 
     def run(self):
         """ Starts the main loop"""
@@ -110,17 +110,21 @@ class SMS900():
     def on_privmsg_received(self, hostmask, channel, msg):
         nickname = self._get_nickname_from_hostmask(hostmask)
 
-
-        if not msg.startswith('!') and self.config['nickname'] in msg:
+        if not msg.startswith('!'):
             self.openai_history.append({
                 'nickname': nickname,
                 'channel': channel,
                 'msg': msg,
             })
-            self.queue_event('NICK_MENTIONED', {"something": "else"})
+
+            if self.config['nickname'] in msg:
+                self.queue_event('TRIGGER_COMPLETION', {})
 
     def openai_set_prompt(self, prompt):
         self.openai.set_prompt(prompt)
+
+    def openai_reset_history(self):
+        self.openai_history.clear()
 
     def _main_loop(self):
         while True:
@@ -191,12 +195,14 @@ class SMS900():
                 self._handle_github_event(event['data'])
             elif event['event_type'] == 'MAILGUN_INCOMING':
                 self._handle_incoming_mms(event['data'])
-            elif event['event_type'] == 'NICK_MENTIONED':
+            elif event['event_type'] == 'TRIGGER_COMPLETION':
                 if self.openai:
+                    context = self._openai_get_relevant_content(event)
+
                     response = self.openai.generate_response(
                         self.config['channel'],
                         self.config['nickname'],
-                        self.openai_history
+                        context
                     )
                     if response:
                         self.openai_history.append({
@@ -216,6 +222,19 @@ class SMS900():
             self._send_privmsg(self.config['channel'], "Unknown error: %s" %
                                err)
             traceback.print_exc()
+
+    def _openai_get_relevant_content(self, data):
+        default_limit = 20
+        context = list(self.openai_history)
+
+        if 'include_all_length' in data:
+            limit = min(data['include_all_length'], default_limit)
+        else:
+            limit = default_limit
+            context = [x for x in context
+                       if self.config['nickname'] in x['msg'] or x['nickname'] == self.config['nickname']]
+
+        return context[-limit:]
 
     def _send_sms(self, number, message):
         logging.info('Sending sms ( %s -> %s )', message, number)

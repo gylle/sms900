@@ -7,18 +7,20 @@ class OpenAI():
 
         self.config_engine = config_engine
         self.config_prompt = config_prompt
+        self.override_prompt = None
 
-    def set_prompt(self, new_config_prompt):
-        self.config_prompt = new_config_prompt
+    def set_prompt(self, prompt):
+        self.override_prompt = prompt
 
     def generate_response(self, channel, my_nickname, history):
-        prompt_to_complete = self.generate_prompt(channel, my_nickname, history)
-        return self.complete_prompt(prompt_to_complete)
+        return self.complete_prompt(
+            self.generate_prompt(channel, my_nickname, history)
+        )
 
     def generate_prompt(self, channel, my_nickname, history):
         prompt = (
-            "You're on an IRC channel called {channel} and your nickname is {nick}."
-            + self.config_prompt
+            "You're on an IRC channel called {channel} and your nickname is {nick}. "
+            + (self.override_prompt if self.override_prompt else self.config_prompt)
         ).format(channel=channel, nick=my_nickname).strip()
 
         prompt += "\n\n"

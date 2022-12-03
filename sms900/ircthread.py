@@ -62,9 +62,11 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
             'h':     self._parse_cmd_help,
             'l':     self._parse_cmd_lookup_carrier,
             'r':     self._parse_cmd_reindex,
-            'p':     self._parse_cmd_prompt,
+            'op':    self._parse_cmd_openai_prompt,
+            'or':    self._parse_cmd_openai_reset_history,
+            'oc':    self._parse_cmd_openai_comment_on_context,
             }
-        m = re.match('^\!(s|S|a|d|h|l|r|p)( .*|$)', msg, re.UNICODE)
+        m = re.match('^\!(s|S|a|d|h|l|r|op|or|oc)( .*|$)', msg, re.UNICODE)
         if m:
             args = m.group(2)
             cmd_dispatch[m.group(1).strip()](hostmask, chan, args)
@@ -161,16 +163,35 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
 
         self.sms900.queue_event('REINDEX_ALL', {})
 
-    def _parse_cmd_prompt(self, hostmask, chan, cmd):
-        logging.info('!p %s, %s, %s' % (hostmask, chan, cmd))
+    def _parse_cmd_openai_prompt(self, hostmask, chan, cmd):
+        logging.info('!op %s, %s, %s' % (hostmask, chan, cmd))
 
         new_prompt = cmd.strip();
-        if not new_prompt:
-            helpers.msg(self.cli, chan, 'Usage: !p(rompt) <text>')
+        self.sms900.openai_set_prompt(new_prompt)
+        helpers.msg(self.cli, chan, 'Kashikomarimashita' if new_prompt else 'Prompt reset')
+
+    def _parse_cmd_openai_reset_history(self, hostmask, chan, cmd):
+        logging.info('!or %s, %s, %s' % (hostmask, chan, cmd))
+
+        m = re.match('^\s*$', cmd, re.UNICODE)
+        if not m:
+            helpers.msg(self.cli, chan, 'Usage: !or(reset history)')
             return
 
-        self.sms900.openai_set_prompt(new_prompt)
-        helpers.msg(self.cli, chan, 'Kashikomarimashita')
+        self.sms900.openai_reset_history()
+        helpers.msg(self.cli, chan, 'History reset')
+
+    def _parse_cmd_openai_comment_on_context(self, hostmask, chan, cmd):
+        logging.info('!oc %s, %s, %s' % (hostmask, chan, cmd))
+
+        m = re.match('^\s*\d+\s*$', cmd, re.UNICODE)
+        if not m:
+            helpers.msg(self.cli, chan, 'Usage: !oc(comment) <number-of-lines>')
+            return
+
+        length = int(cmd.strip())
+
+        self.sms900.queue_event('TRIGGER_COMPLETION', {'include_all_length': length})
 
     def _parse_cmd_help(self, hostmask, chan, cmd):
         helpers.msg(
