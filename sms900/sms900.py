@@ -230,7 +230,7 @@ class SMS900():
         context = list(self.openai_history)
 
         if 'include_all_length' in data:
-            limit = min(data['include_all_length'], default_limit)
+            limit = max(min(data['include_all_length'], default_limit), 1)
         else:
             limit = default_limit
             context = [x for x in context
