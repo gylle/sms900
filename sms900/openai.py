@@ -44,7 +44,10 @@ class OpenAI():
             if h['channel'] != channel:
                 continue
 
-            prompt += "<%s> %s\n" % (h['nickname'], h['msg'])
+            if h['type'] == 'sms':
+                prompt += "[SMS from %s] %s\n" % (h['nickname'], h['msg'])
+            else:
+                prompt += "<%s> %s\n" % (h['nickname'], h['msg'])
 
         prompt += "<%s>" % my_nickname
 

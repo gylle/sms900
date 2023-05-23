@@ -111,6 +111,7 @@ class SMS900():
                 'nickname': nickname,
                 'channel': channel,
                 'msg': msg,
+                'type': 'irc',
             })
 
             if self.config['nickname'] in msg:
@@ -187,13 +188,21 @@ class SMS900():
 
                 msg = '<%s> %s' % (sender, sms_msg)
                 self._send_privmsg(self.config['channel'], msg)
+
+                self.openai_history.append({
+                    'nickname': sender,
+                    'channel': self.config['channel'],
+                    'msg': sms_msg,
+                    'type': 'sms',
+                })
+
             elif event['event_type'] == 'GITHUB_WEBHOOK':
                 self._handle_github_event(event['data'])
             elif event['event_type'] == 'MAILGUN_INCOMING':
                 self._handle_incoming_mms(event['data'])
             elif event['event_type'] == 'TRIGGER_COMPLETION':
                 if self.openai:
-                    context = self._openai_get_relevant_content(event)
+                    context = self._openai_get_relevant_context(event)
 
                     response = self.openai.generate_response(
                         self.config['channel'],
@@ -205,6 +214,7 @@ class SMS900():
                             'nickname': self.config['nickname'],
                             'channel': self.config['channel'],
                             'msg': response,
+                            'type': 'irc',
                         })
 
                         self._openai_parse_response_commands(response)
@@ -221,7 +231,7 @@ class SMS900():
                                err)
             traceback.print_exc()
 
-    def _openai_get_relevant_content(self, data):
+    def _openai_get_relevant_context(self, data):
         default_limit = 20
         context = list(self.openai_history)
 
