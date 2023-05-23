@@ -9,6 +9,7 @@ class OpenAI():
         self.config_prompt = config['openai_prompt'] if 'openai_prompt' in config else ''
         self.config_use_chat = config['openai_use_chat']
         self.config_chat_model = config['openai_chat_model']
+        self.max_line_length = 430
 
         self.override_prompt = None
 
@@ -19,9 +20,11 @@ class OpenAI():
         prompt = self.generate_prompt(channel, my_nickname, history)
 
         if self.config_use_chat:
-            return self.complete_prompt_chat(prompt)
+            completion = self.complete_prompt_chat(prompt)
+        else:
+            completion = self.complete_prompt(prompt)
 
-        return self.complete_prompt(prompt)
+        self.splitlong(completion)
 
     def generate_prompt(self, channel, my_nickname, history):
         chat_instructions = (
@@ -82,3 +85,21 @@ class OpenAI():
         except Exception as err:
             logging.info("Failed to create completion: %s", err)
             return None
+
+    def splitlong(self, text):
+        if isinstance(text, str):
+            text = text.encode('UTF-8', 'ignore')
+
+        text = text.strip()
+        if len(text) <= self.max_line_length:
+            return text.decode('UTF-8', 'ignore')
+
+        newline = text.find(10)
+        split_roughly_at = newline if newline != -1 else self.max_line_length
+        space = text[:split_roughly_at].rfind(32)
+        splitat = space if space != -1 else self.max_line_length
+
+        while splitat > 0 and (text[splitat] & 0xc0) == 0x80:
+            splitat -= 1
+
+        return f"{self.splitlong(text[:splitat])}\n{self.splitlong(text[splitat:])}".strip()
