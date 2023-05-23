@@ -25,7 +25,6 @@ class OpenAI():
 
     def generate_prompt(self, channel, my_nickname, history):
         chat_instructions = (
-            #"Your respons is always a single line with less than 300 characters. "
             "Your repsonses usually fit on a line, but you can use multiple lines when for example generating code. "
             + "You never include \"<{nick}>\" in your completion. "
         )
