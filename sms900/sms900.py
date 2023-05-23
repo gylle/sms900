@@ -196,6 +196,9 @@ class SMS900():
                     'type': 'sms',
                 })
 
+                if self.config['nickname'] in sms_msg:
+                    self.queue_event('TRIGGER_COMPLETION', {})
+
             elif event['event_type'] == 'GITHUB_WEBHOOK':
                 self._handle_github_event(event['data'])
             elif event['event_type'] == 'MAILGUN_INCOMING':
