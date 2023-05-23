@@ -81,10 +81,19 @@ class OpenAI():
                 }]
             )
 
-            return completion.choices[0].message.content.strip()
+            return self.strip_imaginary_response(
+                completion.choices[0].message.content.strip()
+            )
         except Exception as err:
             logging.info("Failed to create completion: %s", err)
             return None
+
+    def strip_imaginary_response(self, text):
+        m = re.match(r'(.+)\n<[-_a-zA-Z0-9]+>', text, re.M|re.S)
+        if m:
+            return m[1]
+
+        return text
 
     def splitlong(self, text):
         if isinstance(text, str):
