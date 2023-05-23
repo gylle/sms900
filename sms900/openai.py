@@ -24,7 +24,7 @@ class OpenAI():
         else:
             completion = self.complete_prompt(prompt)
 
-        self.splitlong(completion)
+        return self.splitlong(completion)
 
     def generate_prompt(self, channel, my_nickname, history):
         chat_instructions = (
