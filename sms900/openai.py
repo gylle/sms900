@@ -20,12 +20,16 @@ class OpenAI():
     def generate_response(self, channel, my_nickname, history):
         prompt = self.generate_prompt(channel, my_nickname, history)
 
-        if self.config_use_chat:
-            completion = self.complete_prompt_chat(prompt)
-        else:
-            completion = self.complete_prompt(prompt)
+        try:
+            if self.config_use_chat:
+                completion = self.complete_prompt_chat(prompt)
+            else:
+                completion = self.complete_prompt(prompt)
 
-        return self.splitlong(completion)
+            return self.splitlong(completion)
+        except Exception as err:
+            logging.info("Failed to create completion: %s", err)
+            return None
 
     def generate_prompt(self, channel, my_nickname, history):
         chat_instructions = (
@@ -58,36 +62,28 @@ class OpenAI():
         return prompt
 
     def complete_prompt(self, prompt):
-        try:
-            completion = openai.Completion.create(
-                engine=self.config_engine,
-                prompt=prompt,
-                stop=['<'],
-                temperature=0.7,
-                max_tokens=256,
-            )
+        completion = openai.Completion.create(
+            engine=self.config_engine,
+            prompt=prompt,
+            stop=['<'],
+            temperature=0.7,
+            max_tokens=256,
+        )
 
-            return completion.choices[0].text.strip()
-        except Exception as err:
-            logging.info("Failed to create completion: %s", err)
-            return None
+        return completion.choices[0].text.strip()
 
     def complete_prompt_chat(self, prompt):
-        try:
-            completion = openai.ChatCompletion.create(
-                model=self.config_chat_model,
-                messages=[{
-                    "role": "user",
-                    "content": prompt
-                }]
-            )
+        completion = openai.ChatCompletion.create(
+            model=self.config_chat_model,
+            messages=[{
+                "role": "user",
+                "content": prompt
+            }]
+        )
 
-            return self.strip_imaginary_response(
-                completion.choices[0].message.content.strip()
-            )
-        except Exception as err:
-            logging.info("Failed to create completion: %s", err)
-            return None
+        return self.strip_imaginary_response(
+            completion.choices[0].message.content.strip()
+        )
 
     def strip_imaginary_response(self, text):
         m = re.match(r'(.+)\n<[-_a-zA-Z0-9]+>', text, re.M|re.S)
