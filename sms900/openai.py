@@ -1,5 +1,6 @@
 import logging
 import openai
+import re
 
 class OpenAI():
     def __init__(self, config):
