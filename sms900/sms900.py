@@ -58,11 +58,7 @@ class SMS900():
 
         try:
             if 'openai_api_key' in self.config:
-                self.openai = OpenAI(
-                    self.config['openai_api_key'],
-                    self.config['openai_engine'],
-                    self.config['openai_prompt'] if 'openai_prompt' in self.config else ''
-                )
+                self.openai = OpenAI(self.config)
         except Exception as err:
             logging.info("Failed to initialize openai: %s", err)
 

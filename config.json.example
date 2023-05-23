@@ -11,6 +11,8 @@
 
     "openai_api_key": "abc",
     "openai_engine": "text-davinci-003",
+    "openai_use_chat": true,
+    "openai_chat_model": "gpt-4",
     "openai_prompt": "You're very helpful but also very annoyed at everyone.",
 
     "mms_save_path": "/srv/sms900",
