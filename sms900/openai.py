@@ -93,19 +93,36 @@ class OpenAI():
         return text
 
     def splitlong(self, text):
-        if isinstance(text, str):
-            text = text.encode('UTF-8', 'ignore')
+        space = 32
+        newline = 10
 
-        text = text.strip()
-        if len(text) <= self.max_line_length:
-            return text.decode('UTF-8', 'ignore')
+        last_newline = 0
+        last_space = None
 
-        newline = text.find(10)
-        split_roughly_at = newline if newline != -1 else self.max_line_length
-        space = text[:split_roughly_at].rfind(32)
-        splitat = space if space != -1 else self.max_line_length
+        text = text.encode('UTF-8', 'ignore')
+        new_text = b""
 
-        while splitat > 0 and (text[splitat] & 0xc0) == 0x80:
-            splitat -= 1
+        for i in range(0, len(text)):
+            if text[i] == newline:
+                new_text += text[last_newline:i+1]
+                last_newline = i+1
+                last_space = None
+                continue
 
-        return f"{self.splitlong(text[:splitat])}\n{self.splitlong(text[splitat:])}".strip()
+            if text[i] == space:
+                last_space = i
+
+            if i - last_newline < self.max_line_length:
+                continue
+
+            splitat = i if not last_space else last_space
+            while splitat > last_newline and (text[splitat] & 0xc0) == 0x80:
+                splitat -= 1
+
+            new_text += text[last_newline:splitat] + b"\n"
+            last_newline = splitat + (1 if last_space else 0)
+            last_space = None
+
+        new_text += text[last_newline:]
+
+        return new_text.decode('UTF-8', 'ignore')
