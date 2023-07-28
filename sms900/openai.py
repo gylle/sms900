@@ -26,7 +26,9 @@ class OpenAI():
             else:
                 completion = self.complete_prompt(prompt)
 
-            return self.splitlong(completion)
+            return self.strip_imaginary_response(
+                self.splitlong(completion)
+            )
         except Exception as err:
             logging.info("Failed to create completion: %s", err)
             return None
@@ -81,9 +83,7 @@ class OpenAI():
             }]
         )
 
-        return self.strip_imaginary_response(
-            completion.choices[0].message.content.strip()
-        )
+        return completion.choices[0].message.content.strip()
 
     def strip_imaginary_response(self, text):
         m = re.match(r'(.+)\n<[-_a-zA-Z0-9]+>', text, re.M|re.S)

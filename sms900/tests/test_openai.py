@@ -67,5 +67,16 @@ class TestOpenAiUtils(unittest.TestCase):
             self.instance.splitlong("åäöabcde"),
         )
 
+    def test_strip_imaginary_response(self):
+        self.assertEqual(
+            "abcdefgh\nxyzåäö",
+            self.instance.strip_imaginary_response("abcdefgh\nxyzåäö")
+        )
+
+        self.assertEqual(
+            "abcdefgh",
+            self.instance.strip_imaginary_response("abcdefgh\n<kalle> xyzåäö\nok")
+        )
+
 if __name__ == '__main__':
     unittest.main()
