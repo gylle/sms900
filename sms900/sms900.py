@@ -120,6 +120,9 @@ class SMS900():
     def openai_set_prompt(self, prompt):
         self.openai.set_prompt(prompt)
 
+    def openai_set_model(self, model):
+        self.openai.set_model(model)
+
     def openai_reset_history(self):
         self.openai_history.clear()
 
