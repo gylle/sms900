@@ -65,8 +65,9 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
             'op':    self._parse_cmd_openai_prompt,
             'or':    self._parse_cmd_openai_reset_history,
             'oc':    self._parse_cmd_openai_comment_on_context,
+            'om':    self._parse_cmd_openai_model,
             }
-        m = re.match('^\!(s|S|a|d|h|l|r|op|or|oc)( .*|$)', msg, re.UNICODE)
+        m = re.match('^\!(s|S|a|d|h|l|r|op|or|oc|om)( .*|$)', msg, re.UNICODE)
         if m:
             args = m.group(2)
             cmd_dispatch[m.group(1).strip()](hostmask, chan, args)
@@ -192,6 +193,13 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
         length = int(cmd.strip())
 
         self.sms900.queue_event('TRIGGER_COMPLETION', {'include_all_length': length})
+
+    def _parse_cmd_openai_model(self, hostmask, chan, cmd):
+        logging.info('!om %s, %s, %s' % (hostmask, chan, cmd))
+
+        new_model = cmd.strip();
+        self.sms900.openai_set_model(new_model)
+        helpers.msg(self.cli, chan, 'Done')
 
     def _parse_cmd_help(self, hostmask, chan, cmd):
         helpers.msg(

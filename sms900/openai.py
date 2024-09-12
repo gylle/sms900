@@ -13,9 +13,13 @@ class OpenAI():
         self.max_line_length = 430
 
         self.override_prompt = None
+        self.override_model = None
 
     def set_prompt(self, prompt):
         self.override_prompt = prompt
+
+    def set_model(self, model):
+        self.override_model = model
 
     def generate_response(self, channel, my_nickname, history):
         prompt = self.generate_prompt(channel, my_nickname, history)
@@ -75,8 +79,9 @@ class OpenAI():
         return completion.choices[0].text.strip()
 
     def complete_prompt_chat(self, prompt):
+        model = self.override_model if self.override_model else self.config_model
         completion = openai.ChatCompletion.create(
-            model=self.config_chat_model,
+            model=model,
             messages=[{
                 "role": "user",
                 "content": prompt
