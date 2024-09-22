@@ -100,10 +100,11 @@ class PhoneBook:
 
 
     def _get_valid_nickname(self, nickname):
-        m = re.match('^([a-zA-Z0-9\\\\\]\[`^{}-]{1,15})$', nickname)
+        re_nickname = r'^([a-zA-Z][a-zA-Z0-9{}[\]\\`^-]{0,15})$'
+        m = re.match(re_nickname, nickname)
         if not m:
             raise SMS900InvalidAddressbookEntry(
-                "Invalid nickname: %s (Should match [a-zA-Z0-9\\\\\]\[`^{}-]{1,15})" % nickname
+                f"Invalid nickname: {nickname} (Should match {re_nickname})"
             )
 
         return m.group(1).lower()

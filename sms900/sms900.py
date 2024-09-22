@@ -404,7 +404,7 @@ class SMS900():
         except SMS900InvalidAddressbookEntry:
             logging.exception("No nickname found for email %s", email)
 
-        m = re.match('^([0-9]+)\@', email)
+        m = re.match('^([0-9]+)@', email)
         if m:
             try:
                 number = self._get_canonicalized_number("+" + m.group(1))

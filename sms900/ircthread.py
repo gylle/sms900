@@ -67,7 +67,7 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
             'oc':    self._parse_cmd_openai_comment_on_context,
             'om':    self._parse_cmd_openai_model,
             }
-        m = re.match('^\!(s|S|a|d|h|l|r|op|or|oc|om)( .*|$)', msg, re.UNICODE)
+        m = re.match('^!(s|S|a|d|h|l|r|op|or|oc|om)( .*|$)', msg, re.UNICODE)
         if m:
             args = m.group(2)
             cmd_dispatch[m.group(1).strip()](hostmask, chan, args)
@@ -78,7 +78,7 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
     def _parse_cmd_send_sms(self, hostmask, chan, cmd):
         logging.info('s! %s %s %s' % (hostmask, chan, cmd))
 
-        m = re.match('^\s*(\S+)\s+(.+)', cmd, re.UNICODE)
+        m = re.match(r'^\s*(\S+)\s+(.+)', cmd, re.UNICODE)
         if not m:
             helpers.msg(self.cli, chan, 'Usage: !s(end) <contact|number> <msg..>')
             return
@@ -95,7 +95,7 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
     def _parse_cmd_pb_add(self, hostmask, chan, cmd):
         logging.info('s! %s %s %s' % (hostmask, chan, cmd))
 
-        m = re.match('^\s*(\S+)\s+(\S+)\s*$', cmd, re.UNICODE)
+        m = re.match(r'^\s*(\S+)\s+(\S+)\s*$', cmd, re.UNICODE)
         if not m:
             helpers.msg(self.cli, chan, 'Usage: !a(dd) contact <number|email>')
             return
@@ -120,7 +120,7 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
     def _parse_cmd_pb_del(self, hostmask, chan, cmd):
         logging.info('s! %s %s %s' % (hostmask, chan, cmd))
 
-        m = re.match('^\s*(\S+)\s*$', cmd, re.UNICODE)
+        m = re.match(r'^\s*(\S+)\s*$', cmd, re.UNICODE)
         if not m:
             helpers.msg(self.cli, chan, 'Usage: !d(elete) contact [email]')
             return
@@ -142,7 +142,7 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
     def _parse_cmd_lookup_carrier(self, hostmask, chan, cmd):
         logging.info('s! %s %s %s' % (hostmask, chan, cmd))
 
-        m = re.match('^\s*(\S+)$', cmd, re.UNICODE)
+        m = re.match(r'^\s*(\S+)$', cmd, re.UNICODE)
         if not m:
             helpers.msg(self.cli, chan, 'Usage: !l(ookup) <number>')
             return
@@ -157,7 +157,7 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
     def _parse_cmd_reindex(self, hostmask, chan, cmd):
         logging.info('!r %s, %s, %s' % (hostmask, chan, cmd))
 
-        m = re.match('^\s*$', cmd, re.UNICODE)
+        m = re.match(r'^\s*$', cmd, re.UNICODE)
         if not m:
             helpers.msg(self.cli, chan, 'Usage: !r(eindex all)')
             return
@@ -174,7 +174,7 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
     def _parse_cmd_openai_reset_history(self, hostmask, chan, cmd):
         logging.info('!or %s, %s, %s' % (hostmask, chan, cmd))
 
-        m = re.match('^\s*$', cmd, re.UNICODE)
+        m = re.match(r'^\s*$', cmd, re.UNICODE)
         if not m:
             helpers.msg(self.cli, chan, 'Usage: !or(reset history)')
             return
@@ -185,7 +185,7 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
     def _parse_cmd_openai_comment_on_context(self, hostmask, chan, cmd):
         logging.info('!oc %s, %s, %s' % (hostmask, chan, cmd))
 
-        m = re.match('^\s*\d+\s*$', cmd, re.UNICODE)
+        m = re.match(r'^\s*\d+\s*$', cmd, re.UNICODE)
         if not m:
             helpers.msg(self.cli, chan, 'Usage: !oc(comment) <number-of-lines>')
             return
