@@ -1,4 +1,4 @@
-FROM docker.io/library/python:3.11-alpine
+FROM docker.io/library/python:3-alpine
 WORKDIR /usr/src/app
 COPY requirements.txt ./
 RUN apk add --no-cache git \
