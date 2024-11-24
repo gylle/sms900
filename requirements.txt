@@ -1,3 +1,4 @@
+dateparser
 twilio==7.*
 git+https://github.com/gylle/oyoyo
 requests-toolbelt<=2.0

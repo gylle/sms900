@@ -1,3 +1,4 @@
+from datetime import datetime
 import logging
 import openai
 import re
@@ -45,9 +46,11 @@ class OpenAI():
 
         prompt = (
             "You're on an IRC channel called {channel} and your nickname is {nick}. "
-            + "You have the ability to send SMS by writing '|SMS:recipient:message|', including the '|'. "
+            + "You have the ability to send SMS by writing '|SMS/recipient/message|', including the '|' and '/'. "
+            + "You can also remind yourself to do things in the future, by writing '|REMIND/relative-or-absolute-time/message|'."
             + "If you want to send SMS to multiple people, you need to write the command multiple times. "
-            + "You only send SMS or even talk about SMS when someone explicitly asks you to. "
+            + "Include all necessary information in the reminders (e.g. who to remind, and so on)."
+            + "You only send/set or even talk about SMS/reminders when someone explicitly asks you to. "
             + (chat_instructions if self.config_use_chat else "")
             + (self.override_prompt if self.override_prompt else self.config_prompt)
         ).format(channel=channel, nick=my_nickname).strip()
@@ -58,14 +61,27 @@ class OpenAI():
             if h['channel'] != channel:
                 continue
 
-            if h['type'] == 'sms':
-                prompt += "[SMS from %s] %s\n" % (h['nickname'], h['msg'])
-            else:
-                prompt += "<%s> %s\n" % (h['nickname'], h['msg'])
+            prompt += self.format_event(h) + "\n"
 
-        prompt += "<%s>" % my_nickname
+        prompt += self.format_event({
+            "type": "irc",
+            "timestamp": datetime.now().astimezone(),
+            "nickname": my_nickname,
+            "msg": "",
+        })
 
         return prompt
+
+    def format_event(self, e):
+        time = e['timestamp'].strftime("%Y-%m-%d %H:%M:%S %Z")
+
+        match e['type']:
+            case 'sms':
+                return f"[{time}] [SMS from {e['nickname']}] {e['msg']}"
+            case 'reminder':
+                return f"[{time}] [REMINDER TRIGGERED] {e['msg']}"
+
+        return f"[{time}] <{e['nickname']}> {e['msg']}"
 
     def complete_prompt(self, prompt):
         completion = openai.Completion.create(

@@ -1,15 +1,17 @@
 """ The main bot module for sms900 """
 from collections import deque
+from datetime import datetime
 import json
 import logging
 import queue
 import re
+import threading
 import traceback
 import uuid
 from os import mkdir, path
 
+import dateparser
 import sqlite3
-
 import twilio
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
@@ -40,6 +42,7 @@ class SMS900():
         self.pb = None
         self.openai = None
         self.openai_history = deque(maxlen=100)
+        self.timers = {}
 
     def run(self):
         """ Starts the main loop"""
@@ -108,6 +111,7 @@ class SMS900():
 
         if not msg.startswith('!'):
             self.openai_history.append({
+                'timestamp': datetime.now().astimezone(),
                 'nickname': nickname,
                 'channel': channel,
                 'msg': msg,
@@ -125,6 +129,17 @@ class SMS900():
 
     def openai_reset_history(self):
         self.openai_history.clear()
+
+    def timers_clear(self):
+        timers = self.timers
+        self.timers = {}
+
+        count = 0
+        for (_, timer) in timers.items():
+            count += 1
+            timer.cancel()
+
+        return count
 
     def _main_loop(self):
         while True:
@@ -193,6 +208,7 @@ class SMS900():
                 self._send_privmsg(self.config['channel'], msg)
 
                 self.openai_history.append({
+                    'timestamp': datetime.now().astimezone(),
                     'nickname': sender,
                     'channel': self.config['channel'],
                     'msg': sms_msg,
@@ -217,6 +233,7 @@ class SMS900():
                     )
                     if response:
                         self.openai_history.append({
+                            'timestamp': datetime.now().astimezone(),
                             'nickname': self.config['nickname'],
                             'channel': self.config['channel'],
                             'msg': response,
@@ -226,6 +243,21 @@ class SMS900():
                         self._openai_parse_response_commands(response)
 
                         self._send_privmsg(self.config['channel'], response)
+                else:
+                    logging.info("openai not configured")
+            elif event['event_type'] == 'REMINDER_TRIGGERED':
+                if self.openai:
+                    del self.timers[event['uuid']]
+
+                    self.openai_history.append({
+                        'timestamp': datetime.now().astimezone(),
+                        'nickname': self.config['nickname'],
+                        'channel': self.config['channel'],
+                        'msg': event['msg'],
+                        'type': 'reminder',
+                    })
+
+                    self.queue_event('TRIGGER_COMPLETION', {})
                 else:
                     logging.info("openai not configured")
 
@@ -251,13 +283,44 @@ class SMS900():
         return context[-limit:]
 
     def _openai_parse_response_commands(self, response):
-        m = re.findall(r'\|SMS:([^:]+):([^|]+)\|', response)
+        m = re.findall(r'\|SMS/([^|/]+)/([^|]+)\|', response)
         for sms in m:
             self.queue_event('SEND_SMS', {
                 'hostmask': 'sms900!fakehostmask',
                 'number': sms[0],
                 'msg': sms[1],
             })
+
+        m = re.findall(r'\|REMIND/([^|/]+)/([^|]+)\|', response)
+        for reminder in m:
+            try:
+                _uuid = str(uuid.uuid4())
+                dt = dateparser.parse(reminder[0], settings={
+                    'PREFER_DATES_FROM': 'future',
+                }).astimezone()
+                msg = reminder[1]
+
+                in_seconds = (dt - datetime.now().astimezone()).total_seconds()
+                if in_seconds <= 10:
+                    self._send_privmsg(self.config['channel'],
+                                       f"Timer would trigger in {in_seconds}s; rejecting")
+                    continue
+
+                timer = threading.Timer(in_seconds, self.queue_event, [
+                    'REMINDER_TRIGGERED', {
+                        'uuid': _uuid,
+                        'msg': msg,
+                    }
+                ])
+
+                self.timers[_uuid] = timer
+                timer.start()
+
+                self._send_privmsg(self.config['channel'],
+                                   f"Timer scheduled for {dt.isoformat(' ')}")
+            except Exception as e:
+                self._send_privmsg(self.config['channel'],
+                                   "Failed to set reminder: %s" % e)
 
 
     def _send_sms(self, number, message):
