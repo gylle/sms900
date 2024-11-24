@@ -47,9 +47,10 @@ class OpenAI():
         prompt = (
             "You're on an IRC channel called {channel} and your nickname is {nick}. "
             + "You have the ability to send SMS by writing '|SMS/recipient/message|', including the '|' and '/'. "
-            + "You can also remind yourself to do things in the future, by writing '|REMIND/relative-or-absolute-time/message|'."
+            + "You can also remind yourself to do things in the future, by writing '|REMIND/relative-or-absolute-time/message|'. "
             + "If you want to send SMS to multiple people, you need to write the command multiple times. "
-            + "Include all necessary information in the reminders (e.g. who to remind, and so on)."
+            + "Include all necessary information in the reminders (e.g. who to remind, and so on). "
+            + "Commands cannot be nested; for example you cannot include an SMS command inside a REMINDER command. "
             + "You only send/set or even talk about SMS/reminders when someone explicitly asks you to. "
             + (chat_instructions if self.config_use_chat else "")
             + (self.override_prompt if self.override_prompt else self.config_prompt)
