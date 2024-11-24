@@ -69,6 +69,8 @@ class SMS900():
         http_thread = HTTPThread(self, ('0.0.0.0', self.config['http_server_port']))
         http_thread.start()
 
+        self._load_timers()
+
         logging.info("Starting main loop")
         self._main_loop()
 
@@ -84,7 +86,7 @@ class SMS900():
 
         try:
             conn.execute(
-                "create table phonebook ("
+                "create table if not exists phonebook ("
                 "  id integer primary key,"
                 "  nickname text UNIQUE,"
                 "  number text UNIQUE"
@@ -92,13 +94,36 @@ class SMS900():
             )
 
             conn.execute(
-                "create table phonebook_email ("
+                "create table if not exists phonebook_email ("
                 "  email text primary key collate nocase,"
                 "  nickname text"
                 ")"
             )
+
+            conn.execute(
+                "create table if not exists timers ("
+                "  uuid text primary key,"
+                "  timestamp integer,"
+                "  msg text"
+                ")"
+            )
         except sqlite3.Error as err:
             logging.info("Failed to create table(s): %s", err)
+
+    def _load_timers(self):
+        now = datetime.now().timestamp()
+
+        self.dbconn.execute("delete from timers where timestamp <= ?", (now - 60,))
+
+        for row in self.dbconn.execute("select uuid, timestamp, msg from timers"):
+            uuid = row[0]
+            at_time = datetime.fromtimestamp(row[1]).astimezone()
+            msg = row[2]
+
+            if self._schedule_timer(at_time, msg, override_uuid=uuid):
+                logging.info(f"Loaded timer {uuid}/{at_time}: {msg}")
+            else:
+                logging.info(f"Failed to load timer {uuid}/{at_time}: {msg}")
 
     def queue_event(self, event_type, data):
         """ queues event, stupid doc string i know """
@@ -130,14 +155,30 @@ class SMS900():
     def openai_reset_history(self):
         self.openai_history.clear()
 
-    def timers_clear(self):
-        timers = self.timers
-        self.timers = {}
+    def timers_list(self):
+        for (uuid, timer) in self.timers.items():
+            print(f"{uuid}: Timer args is {timer.args}")
 
+            # Private variables? What's that?
+            if 'msg' not in timer.args[1]:
+                continue
+
+            self._send_privmsg(
+                self.config['channel'],
+                f"<{uuid}> {timer.args[1]['msg']}"
+            )
+
+    def timers_clear(self, _uuid):
         count = 0
-        for (_, timer) in timers.items():
-            count += 1
-            timer.cancel()
+        for uuid in list(self.timers.keys()):
+            if _uuid == 'all' or _uuid == uuid:
+                timer = self.timers[uuid]
+                del self.timers[uuid]
+                count += 1
+                timer.cancel()
+                self.queue_event('DB_DELETE_TIMER', {"uuid": uuid})
+            else:
+                logging.info(f"Ignoring {_uuid} != {uuid}")
 
         return count
 
@@ -248,6 +289,7 @@ class SMS900():
             elif event['event_type'] == 'REMINDER_TRIGGERED':
                 if self.openai:
                     del self.timers[event['uuid']]
+                    self.queue_event('DB_DELETE_TIMER', {'uuid': uuid})
 
                     self.openai_history.append({
                         'timestamp': datetime.now().astimezone(),
@@ -260,6 +302,9 @@ class SMS900():
                     self.queue_event('TRIGGER_COMPLETION', {})
                 else:
                     logging.info("openai not configured")
+
+            elif event['event_type'] == 'DB_DELETE_TIMER':
+                self.dbconn.execute("DELETE FROM timers WHERE uuid = ?", (event['uuid'],))
 
         except (SMS900InvalidNumberFormatException,
                 SMS900InvalidAddressbookEntry) as err:
@@ -294,34 +339,51 @@ class SMS900():
         m = re.findall(r'\|REMIND/([^|/]+)/([^|]+)\|', response)
         for reminder in m:
             try:
-                _uuid = str(uuid.uuid4())
                 dt = dateparser.parse(reminder[0], settings={
                     'PREFER_DATES_FROM': 'future',
                 }).astimezone()
                 msg = reminder[1]
 
-                in_seconds = (dt - datetime.now().astimezone()).total_seconds()
-                if in_seconds <= 10:
+                _uuid = self._schedule_timer(dt, msg)
+                if _uuid:
+                    self.dbconn.execute("INSERT INTO timers(uuid, timestamp, msg) values (?, ?, ?)", (
+                        _uuid,
+                        dt.timestamp(),
+                        msg
+                    ))
+
                     self._send_privmsg(self.config['channel'],
-                                       f"Timer would trigger in {in_seconds}s; rejecting")
-                    continue
-
-                timer = threading.Timer(in_seconds, self.queue_event, [
-                    'REMINDER_TRIGGERED', {
-                        'uuid': _uuid,
-                        'msg': msg,
-                    }
-                ])
-
-                self.timers[_uuid] = timer
-                timer.start()
-
-                self._send_privmsg(self.config['channel'],
-                                   f"Timer scheduled for {dt.isoformat(' ')}")
+                                       f"Timer scheduled for {dt.isoformat(' ')}")
             except Exception as e:
                 self._send_privmsg(self.config['channel'],
                                    "Failed to set reminder: %s" % e)
 
+
+    def _schedule_timer(self, at_time, msg, override_uuid=None):
+        in_seconds = (at_time - datetime.now().astimezone()).total_seconds()
+        if in_seconds <= 10:
+            self._send_privmsg(
+                self.config['channel'],
+                f"Timer would trigger in {in_seconds}s; rejecting"
+            )
+
+            return None
+
+        _uuid = override_uuid if override_uuid else str(uuid.uuid4())
+
+        timer = threading.Timer(in_seconds, self.queue_event, [
+            'REMINDER_TRIGGERED', {
+                'uuid': _uuid,
+                'msg': msg,
+            }
+        ])
+
+        self.timers[_uuid] = timer
+        timer.start()
+
+        logging.info(f"Timer {_uuid} scheduled in {in_seconds} seconds")
+
+        return _uuid
 
     def _send_sms(self, number, message):
         logging.info('Sending sms ( %s -> %s )', message, number)

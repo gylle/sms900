@@ -67,8 +67,9 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
             'oc':    self._parse_cmd_openai_comment_on_context,
             'om':    self._parse_cmd_openai_model,
             'tc':    self._parse_cmd_timers_clear,
+            'tl':    self._parse_cmd_timers_list,
             }
-        m = re.match('^!(s|S|a|d|h|l|r|op|or|oc|om|tc)( .*|$)', msg, re.UNICODE)
+        m = re.match('^!(s|S|a|d|h|l|r|op|or|oc|om|tc|tl)( .*|$)', msg, re.UNICODE)
         if m:
             args = m.group(2)
             cmd_dispatch[m.group(1).strip()](hostmask, chan, args)
@@ -202,15 +203,25 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
         self.sms900.openai_set_model(new_model)
         helpers.msg(self.cli, chan, 'Done')
 
-    def _parse_cmd_timers_clear(self, hostmask, chan, cmd):
-        logging.info('!tc %s, %s, %s' % (hostmask, chan, cmd))
+    def _parse_cmd_timers_list(self, hostmask, chan, cmd):
+        logging.info('!tl %s, %s, %s' % (hostmask, chan, cmd))
 
         m = re.match(r'^\s*$', cmd, re.UNICODE)
         if not m:
-            helpers.msg(self.cli, chan, 'Usage: !tc [cancels all timers]')
+            helpers.msg(self.cli, chan, 'Usage: !tl(ist)')
             return
 
-        count = self.sms900.timers_clear()
+        self.sms900.timers_list()
+
+    def _parse_cmd_timers_clear(self, hostmask, chan, cmd):
+        logging.info('!tc %s, %s, %s' % (hostmask, chan, cmd))
+
+        m = re.match(r'^\s*(all|[-a-fA-F0-9]{36})\s*$', cmd, re.UNICODE)
+        if not m:
+            helpers.msg(self.cli, chan, 'Usage: !tc(lear) <all|uuid>')
+            return
+
+        count = self.sms900.timers_clear(m[1])
         helpers.msg(self.cli, chan, f'Cleared {count} active timers')
 
     def _parse_cmd_help(self, hostmask, chan, cmd):
