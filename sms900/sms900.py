@@ -289,7 +289,7 @@ class SMS900():
             elif event['event_type'] == 'REMINDER_TRIGGERED':
                 if self.openai:
                     del self.timers[event['uuid']]
-                    self.queue_event('DB_DELETE_TIMER', {'uuid': uuid})
+                    self.queue_event('DB_DELETE_TIMER', {'uuid': event['uuid']})
 
                     self.openai_history.append({
                         'timestamp': datetime.now().astimezone(),
