@@ -20,7 +20,7 @@ from sms900.phonebook import PhoneBook, SMS900InvalidAddressbookEntry
 from sms900.ircthread import IRCThread
 from sms900.http_interface import HTTPThread
 from sms900.indexer import Indexer
-from sms900.openai import OpenAI
+from sms900.ai import OpenAI
 
 
 class SMS900InvalidNumberFormatException(Exception):

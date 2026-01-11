@@ -4,15 +4,13 @@ import sys
 
 sys.path.insert(0, os.getcwd() + '/..')
 
-import openai
+import ai
 
 class TestOpenAiUtils(unittest.TestCase):
     def setUp(self):
-        self.instance = openai.OpenAI({
-            "openai_api_key": 123,
-            "openai_engine": 123,
-            "openai_use_chat": True,
-            "openai_chat_model": 123,
+        self.instance = ai.OpenAI({
+            "openai_api_key": "test-key-123",
+            "openai_chat_model": "gpt-4",
         })
 
     def test_splitlong(self):

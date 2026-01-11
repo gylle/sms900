@@ -1,36 +1,28 @@
 from datetime import datetime
 import logging
-import openai
 import re
+from openai import OpenAI as OpenAIClient
 
 class OpenAI():
     def __init__(self, config):
-        openai.api_key = config['openai_api_key']
-
-        self.config_engine = config['openai_engine'],
-        self.config_prompt = config['openai_prompt'] if 'openai_prompt' in config else ''
-        self.config_use_chat = config['openai_use_chat']
-        self.config_chat_model = config['openai_chat_model']
+        self.client = OpenAIClient(api_key=config['openai_api_key'])
+        self.config_prompt = config.get('openai_prompt', '')
+        self.config_model = config['openai_chat_model']
         self.max_line_length = 430
-
         self.override_prompt = None
-        self.override_chat_model = None
+        self.override_model = None
 
     def set_prompt(self, prompt):
         self.override_prompt = prompt
 
     def set_model(self, model):
-        self.override_chat_model = model
+        self.override_model = model
 
     def generate_response(self, channel, my_nickname, history):
         prompt = self.generate_prompt(channel, my_nickname, history)
 
         try:
-            if self.config_use_chat:
-                completion = self.complete_prompt_chat(prompt)
-            else:
-                completion = self.complete_prompt(prompt)
-
+            completion = self.complete_prompt_chat(prompt)
             return self.strip_imaginary_response(
                 self.splitlong(completion)
             )
@@ -40,39 +32,43 @@ class OpenAI():
 
     def generate_prompt(self, channel, my_nickname, history):
         chat_instructions = (
-            "Your repsonses usually fit on a line, but you can use multiple lines when for example generating code. "
-            + "You never include \"<{nick}>\" in your completion. "
+            "Your responses usually fit on a line, but you can use multiple lines when for example generating code. "
+            "You never include \"<{nick}>\" in your completion. "
         )
 
-        prompt = (
+        system_prompt = (
             "You're on an IRC channel called {channel} and your nickname is {nick}. "
-            + "You have the ability to send SMS by writing '|SMS/recipient/message|', including the '|' and '/'. "
-            + "If you want to send SMS to multiple people, you need to write the command multiple times. "
-            + "You can also remind yourself to do things in the future, by writing '|REMIND/relative-or-absolute-time/message|'. "
-            + "In reminders, include all necessary information for you to act on them (e.g. who to remind, and so on). "
-            + "Assume that no other context will be available. "
-            + "Commands cannot be nested; for example you cannot include an SMS command inside a REMINDER command. "
-            + "You only send/set or even talk about SMS/reminders when someone explicitly asks you to. "
-            + (chat_instructions if self.config_use_chat else "")
-            + (self.override_prompt if self.override_prompt else self.config_prompt)
-        ).format(channel=channel, nick=my_nickname).strip()
+            "You have the ability to send SMS by writing '|SMS/recipient/message|', including the '|' and '/'. "
+            "If you want to send SMS to multiple people, you need to write the command multiple times. "
+            "You can also remind yourself to do things in the future, by writing '|REMIND/relative-or-absolute-time/message|'. "
+            "In reminders, include all necessary information for you to act on them (e.g. who to remind, and so on). "
+            "Assume that no other context will be available. "
+            "Commands cannot be nested; for example you cannot include an SMS command inside a REMINDER command. "
+            "You only send/set or even talk about SMS/reminders when someone explicitly asks you to. "
+            "{chat_instructions}"
+            "{custom_prompt}"
+        ).format(
+            channel=channel,
+            nick=my_nickname,
+            chat_instructions=chat_instructions,
+            custom_prompt=self.override_prompt if self.override_prompt else self.config_prompt
+        ).strip()
 
-        prompt += "\n\n"
-
+        conversation = ""
         for h in history:
             if h['channel'] != channel:
                 continue
 
-            prompt += self.format_event(h) + "\n"
+            conversation += self.format_event(h) + "\n"
 
-        prompt += self.format_event({
+        conversation += self.format_event({
             "type": "irc",
             "timestamp": datetime.now().astimezone(),
             "nickname": my_nickname,
             "msg": "",
         })
 
-        return prompt
+        return system_prompt, conversation
 
     def format_event(self, e):
         time = e['timestamp'].strftime("%Y-%m-%d %H:%M:%S %Z")
@@ -85,25 +81,24 @@ class OpenAI():
 
         return f"[{time}] <{e['nickname']}> {e['msg']}"
 
-    def complete_prompt(self, prompt):
-        completion = openai.Completion.create(
-            engine=self.config_engine,
-            prompt=prompt,
+    def complete_prompt_chat(self, prompt):
+        system_prompt, user_message = prompt
+
+        completion = self.client.chat.completions.create(
+            model=self.override_model if self.override_model else self.config_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": user_message
+                }
+            ],
             stop=['<'],
             temperature=0.7,
             max_tokens=256,
-        )
-
-        return completion.choices[0].text.strip()
-
-    def complete_prompt_chat(self, prompt):
-        model = self.override_chat_model if self.override_chat_model else self.config_chat_model
-        completion = openai.ChatCompletion.create(
-            model=model,
-            messages=[{
-                "role": "user",
-                "content": prompt
-            }]
         )
 
         return completion.choices[0].message.content.strip()
