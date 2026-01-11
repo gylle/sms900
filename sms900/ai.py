@@ -95,10 +95,7 @@ class OpenAI():
                     "role": "user",
                     "content": user_message
                 }
-            ],
-            stop=['<'],
-            temperature=0.7,
-            max_tokens=256,
+            ]
         )
 
         return completion.choices[0].message.content.strip()
