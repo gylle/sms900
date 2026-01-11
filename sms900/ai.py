@@ -1,13 +1,14 @@
+from abc import ABC, abstractmethod
 from datetime import datetime
 import logging
 import re
-from openai import OpenAI as OpenAIClient
 
-class OpenAI():
+
+class AIProvider(ABC):
+    """Base class for AI providers (OpenAI, Gemini, etc.)"""
+
     def __init__(self, config):
-        self.client = OpenAIClient(api_key=config['openai_api_key'])
-        self.config_prompt = config.get('openai_prompt', '')
-        self.config_model = config['openai_chat_model']
+        self.config_prompt = config.get('ai_prompt', config.get('openai_prompt', ''))
         self.max_line_length = 430
         self.override_prompt = None
         self.override_model = None
@@ -81,24 +82,10 @@ class OpenAI():
 
         return f"[{time}] <{e['nickname']}> {e['msg']}"
 
+    @abstractmethod
     def complete_prompt_chat(self, prompt):
-        system_prompt, user_message = prompt
-
-        completion = self.client.chat.completions.create(
-            model=self.override_model if self.override_model else self.config_model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": user_message
-                }
-            ]
-        )
-
-        return completion.choices[0].message.content.strip()
+        """Complete a prompt using the AI provider's API."""
+        pass
 
     def strip_imaginary_response(self, text):
         m = re.match(r'(.+)\n<[-_a-zA-Z0-9]+>', text, re.M|re.S)
@@ -141,3 +128,67 @@ class OpenAI():
         new_text += text[last_newline:]
 
         return new_text.decode('UTF-8', 'ignore')
+
+
+class OpenAI(AIProvider):
+    """OpenAI API provider."""
+
+    def __init__(self, config):
+        super().__init__(config)
+        from openai import OpenAI as OpenAIClient
+        self.client = OpenAIClient(api_key=config['openai_api_key'])
+        self.config_model = config.get('openai_chat_model', 'gpt-4')
+
+    def complete_prompt_chat(self, prompt):
+        system_prompt, user_message = prompt
+
+        completion = self.client.chat.completions.create(
+            model=self.override_model if self.override_model else self.config_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": user_message
+                }
+            ]
+        )
+
+        return completion.choices[0].message.content.strip()
+
+
+class Google(AIProvider):
+    """Google Gemini API provider."""
+
+    def __init__(self, config):
+        super().__init__(config)
+        from google import genai
+        self.client = genai.Client(api_key=config['google_api_key'])
+        self.config_model = config.get('google_model', 'gemini-2.0-flash')
+
+    def complete_prompt_chat(self, prompt):
+        system_prompt, user_message = prompt
+
+        response = self.client.models.generate_content(
+            model=self.override_model if self.override_model else self.config_model,
+            contents=user_message,
+            config={
+                "system_instruction": system_prompt,
+            }
+        )
+
+        return response.text.strip()
+
+
+def create_ai_provider(config):
+    """Factory function to create the appropriate AI provider based on config."""
+    if 'openai_api_key' in config:
+        logging.info("Using OpenAI AI provider")
+        return OpenAI(config)
+    elif 'google_api_key' in config:
+        logging.info("Using Google AI provider")
+        return Google(config)
+    else:
+        return None

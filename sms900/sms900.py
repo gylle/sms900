@@ -20,7 +20,7 @@ from sms900.phonebook import PhoneBook, SMS900InvalidAddressbookEntry
 from sms900.ircthread import IRCThread
 from sms900.http_interface import HTTPThread
 from sms900.indexer import Indexer
-from sms900.ai import OpenAI
+from sms900.ai import create_ai_provider
 
 
 class SMS900InvalidNumberFormatException(Exception):
@@ -60,10 +60,9 @@ class SMS900():
         self.irc_thread.start()
 
         try:
-            if 'openai_api_key' in self.config:
-                self.openai = OpenAI(self.config)
+            self.openai = create_ai_provider(self.config)
         except Exception as err:
-            logging.info("Failed to initialize openai: %s", err)
+            logging.info("Failed to initialize AI provider: %s", err)
 
         logging.info("Starting webserver")
         http_thread = HTTPThread(self, ('0.0.0.0', self.config['http_server_port']))
@@ -150,7 +149,17 @@ class SMS900():
         self.openai.set_prompt(prompt)
 
     def openai_set_model(self, model):
-        self.openai.set_model(model)
+        from sms900.ai import OpenAI, Google
+
+        if model.startswith('google:'):
+            model_name = model[7:]  # Remove 'google:' prefix
+            if not isinstance(self.openai, Google):
+                self.openai = Google(self.config)
+            self.openai.set_model(model_name)
+        else:
+            if not isinstance(self.openai, OpenAI):
+                self.openai = OpenAI(self.config)
+            self.openai.set_model(model)
 
     def openai_reset_history(self):
         self.openai_history.clear()
