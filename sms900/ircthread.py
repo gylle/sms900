@@ -278,6 +278,7 @@ class IRCThread(Thread):
                 msg = cmd[2]
                 logging.info('Handling event (%s) -> (%s, %s)' % (cmd, target, msg))
                 helpers.msg(cli, target, msg)
+                time.sleep(0.5)  # Rate limit to avoid excess flood
 
             self._check_connection(cli)
 
@@ -303,4 +304,7 @@ class IRCThread(Thread):
                     raise Exception("Lag is %s, exceeded timeout %s" % (lag, self.PING_TIMEOUT))
 
     def send_privmsg(self, target, msg):
-        self.cmd_queue.append(['PRIVMSG', target, msg])
+        for line in msg.split('\n'):
+            line = line.strip()
+            if line:  # Skip empty lines
+                self.cmd_queue.append(['PRIVMSG', target, line])
