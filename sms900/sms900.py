@@ -156,6 +156,19 @@ class SMS900():
             if not isinstance(self.openai, Google):
                 self.openai = Google(self.config)
             self.openai.set_model(model_name)
+        elif ':' in model:
+            provider_name, model_name = model.split(':', 1)
+            providers = self.config.get('ai_providers', {})
+            if provider_name not in providers:
+                raise Exception(f"Unknown AI provider: {provider_name}")
+            provider_config = {
+                'openai_api_key': providers[provider_name]['api_key'],
+                'openai_base_url': providers[provider_name]['base_url'],
+                'openai_chat_model': model_name,
+                'ai_prompt': self.config.get('ai_prompt', self.config.get('openai_prompt', '')),
+            }
+            self.openai = OpenAI(provider_config)
+            self.openai.set_model(model_name)
         else:
             if not isinstance(self.openai, OpenAI):
                 self.openai = OpenAI(self.config)

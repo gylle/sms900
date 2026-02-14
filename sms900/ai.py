@@ -136,7 +136,10 @@ class OpenAI(AIProvider):
     def __init__(self, config):
         super().__init__(config)
         from openai import OpenAI as OpenAIClient
-        self.client = OpenAIClient(api_key=config['openai_api_key'])
+        kwargs = {'api_key': config['openai_api_key']}
+        if 'openai_base_url' in config:
+            kwargs['base_url'] = config['openai_base_url']
+        self.client = OpenAIClient(**kwargs)
         self.config_model = config.get('openai_chat_model', 'gpt-4')
 
     def complete_prompt_chat(self, prompt):

@@ -201,7 +201,10 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
 
         new_model = cmd.strip()
         self.sms900.openai_set_model(new_model)
-        provider = "Google" if new_model.startswith('google:') else "OpenAI"
+        if ':' in new_model:
+            provider = new_model.split(':', 1)[0].capitalize()
+        else:
+            provider = "OpenAI"
         helpers.msg(self.cli, chan, f'Model set ({provider})')
 
     def _parse_cmd_timers_list(self, hostmask, chan, cmd):
