@@ -161,17 +161,6 @@ class SMS900():
     def openai_set_model(self, model):
         from sms900.ai import OpenAI, Google
 
-        # Resolve default model for "provider:" syntax
-        if model.endswith(':'):
-            provider_name = model[:-1]
-            row = self.dbconn.execute(
-                "SELECT value FROM ai_state WHERE key = ?",
-                (f"default:{provider_name}",)
-            ).fetchone()
-            if not row:
-                raise Exception(f"No default model set for provider: {provider_name}")
-            model = f"{provider_name}:{row[0]}"
-
         if model.startswith('google:'):
             model_name = model[7:]  # Remove 'google:' prefix
             if not isinstance(self.openai, Google):
@@ -198,29 +187,12 @@ class SMS900():
             self.openai.set_model(model)
             self.openai_provider_name = "OpenAI"
 
-        self.dbconn.execute(
-            "INSERT OR REPLACE INTO ai_state (key, value) VALUES (?, ?)",
-            ("last_model", model)
-        )
-
     def openai_reset_history(self):
         self.openai_history.clear()
 
     def openai_get_info(self):
         model = self.openai.override_model or self.openai.config_model
         return (self.openai_provider_name or "Unknown", model)
-
-    def openai_set_default_model(self, provider, model):
-        self.dbconn.execute(
-            "INSERT OR REPLACE INTO ai_state (key, value) VALUES (?, ?)",
-            (f"default:{provider}", model)
-        )
-
-    def openai_get_defaults(self):
-        rows = self.dbconn.execute(
-            "SELECT key, value FROM ai_state WHERE key LIKE 'default:%'"
-        ).fetchall()
-        return [(key[len("default:"):], value) for key, value in rows]
 
     def _load_ai_model(self):
         if not self.openai:
@@ -384,6 +356,44 @@ class SMS900():
                     self.queue_event('TRIGGER_COMPLETION', {})
                 else:
                     logging.info("openai not configured")
+
+            elif event['event_type'] == 'SET_AI_MODEL':
+                model = event['model']
+                if model.endswith(':'):
+                    provider_name = model[:-1]
+                    row = self.dbconn.execute(
+                        "SELECT value FROM ai_state WHERE key = ?",
+                        (f"default:{provider_name}",)
+                    ).fetchone()
+                    if not row:
+                        raise Exception(f"No default model set for provider: {provider_name}")
+                    model = f"{provider_name}:{row[0]}"
+                self.openai_set_model(model)
+                self.dbconn.execute(
+                    "INSERT OR REPLACE INTO ai_state (key, value) VALUES (?, ?)",
+                    ("last_model", model)
+                )
+                self._send_privmsg(self.config['channel'], f"Model set ({self.openai_provider_name})")
+
+            elif event['event_type'] == 'SET_AI_DEFAULT':
+                provider = event['provider']
+                model = event['model']
+                self.dbconn.execute(
+                    "INSERT OR REPLACE INTO ai_state (key, value) VALUES (?, ?)",
+                    (f"default:{provider}", model)
+                )
+                self._send_privmsg(self.config['channel'], f"Default for {provider} set to {model}")
+
+            elif event['event_type'] == 'GET_AI_DEFAULTS':
+                rows = self.dbconn.execute(
+                    "SELECT key, value FROM ai_state WHERE key LIKE 'default:%'"
+                ).fetchall()
+                if not rows:
+                    self._send_privmsg(self.config['channel'], "No default models configured")
+                else:
+                    for key, value in rows:
+                        provider = key[len("default:"):]
+                        self._send_privmsg(self.config['channel'], f"{provider}: {value}")
 
             elif event['event_type'] == 'DB_DELETE_TIMER':
                 self.dbconn.execute("DELETE FROM timers WHERE uuid = ?", (event['uuid'],))

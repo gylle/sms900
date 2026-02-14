@@ -202,12 +202,7 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
         logging.info('!om %s, %s, %s' % (hostmask, chan, cmd))
 
         new_model = cmd.strip()
-        self.sms900.openai_set_model(new_model)
-        if ':' in new_model:
-            provider = new_model.split(':', 1)[0].capitalize()
-        else:
-            provider = "OpenAI"
-        helpers.msg(self.cli, chan, f'Model set ({provider})')
+        self.sms900.queue_event('SET_AI_MODEL', {'model': new_model})
 
     def _parse_cmd_openai_info(self, hostmask, chan, cmd):
         logging.info('!oi %s, %s, %s' % (hostmask, chan, cmd))
@@ -220,12 +215,7 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
 
         args = cmd.strip()
         if not args:
-            defaults = self.sms900.openai_get_defaults()
-            if not defaults:
-                helpers.msg(self.cli, chan, 'No default models configured')
-            else:
-                for provider, model in defaults:
-                    helpers.msg(self.cli, chan, f'{provider}: {model}')
+            self.sms900.queue_event('GET_AI_DEFAULTS', {})
             return
 
         m = re.match(r'^(\S+)\s+(\S+)\s*$', args, re.UNICODE)
@@ -235,8 +225,7 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
 
         provider = m.group(1)
         model = m.group(2)
-        self.sms900.openai_set_default_model(provider, model)
-        helpers.msg(self.cli, chan, f'Default for {provider} set to {model}')
+        self.sms900.queue_event('SET_AI_DEFAULT', {'provider': provider, 'model': model})
 
     def _parse_cmd_timers_list(self, hostmask, chan, cmd):
         logging.info('!tl %s, %s, %s' % (hostmask, chan, cmd))
