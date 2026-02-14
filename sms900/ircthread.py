@@ -66,10 +66,12 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
             'or':    self._parse_cmd_openai_reset_history,
             'oc':    self._parse_cmd_openai_comment_on_context,
             'om':    self._parse_cmd_openai_model,
+            'oi':    self._parse_cmd_openai_info,
+            'od':    self._parse_cmd_openai_default,
             'tc':    self._parse_cmd_timers_clear,
             'tl':    self._parse_cmd_timers_list,
             }
-        m = re.match('^!(s|S|a|d|h|l|r|op|or|oc|om|tc|tl)( .*|$)', msg, re.UNICODE)
+        m = re.match('^!(s|S|a|d|h|l|r|op|or|oc|om|oi|od|tc|tl)( .*|$)', msg, re.UNICODE)
         if m:
             args = m.group(2)
             cmd_dispatch[m.group(1).strip()](hostmask, chan, args)
@@ -206,6 +208,35 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
         else:
             provider = "OpenAI"
         helpers.msg(self.cli, chan, f'Model set ({provider})')
+
+    def _parse_cmd_openai_info(self, hostmask, chan, cmd):
+        logging.info('!oi %s, %s, %s' % (hostmask, chan, cmd))
+
+        provider, model = self.sms900.openai_get_info()
+        helpers.msg(self.cli, chan, f'Current model: {provider} / {model}')
+
+    def _parse_cmd_openai_default(self, hostmask, chan, cmd):
+        logging.info('!od %s, %s, %s' % (hostmask, chan, cmd))
+
+        args = cmd.strip()
+        if not args:
+            defaults = self.sms900.openai_get_defaults()
+            if not defaults:
+                helpers.msg(self.cli, chan, 'No default models configured')
+            else:
+                for provider, model in defaults:
+                    helpers.msg(self.cli, chan, f'{provider}: {model}')
+            return
+
+        m = re.match(r'^(\S+)\s+(\S+)\s*$', args, re.UNICODE)
+        if not m:
+            helpers.msg(self.cli, chan, 'Usage: !od [provider model]')
+            return
+
+        provider = m.group(1)
+        model = m.group(2)
+        self.sms900.openai_set_default_model(provider, model)
+        helpers.msg(self.cli, chan, f'Default for {provider} set to {model}')
 
     def _parse_cmd_timers_list(self, hostmask, chan, cmd):
         logging.info('!tl %s, %s, %s' % (hostmask, chan, cmd))

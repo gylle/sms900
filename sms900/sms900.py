@@ -41,6 +41,7 @@ class SMS900():
         self.irc_thread = None
         self.pb = None
         self.openai = None
+        self.openai_provider_name = None
         self.openai_history = deque(maxlen=100)
         self.timers = {}
 
@@ -63,6 +64,8 @@ class SMS900():
             self.openai = create_ai_provider(self.config)
         except Exception as err:
             logging.info("Failed to initialize AI provider: %s", err)
+
+        self._load_ai_model()
 
         logging.info("Starting webserver")
         http_thread = HTTPThread(self, ('0.0.0.0', self.config['http_server_port']))
@@ -104,6 +107,13 @@ class SMS900():
                 "  uuid text primary key,"
                 "  timestamp integer,"
                 "  msg text"
+                ")"
+            )
+
+            conn.execute(
+                "create table if not exists ai_state ("
+                "  key text primary key,"
+                "  value text"
                 ")"
             )
         except sqlite3.Error as err:
@@ -151,11 +161,23 @@ class SMS900():
     def openai_set_model(self, model):
         from sms900.ai import OpenAI, Google
 
+        # Resolve default model for "provider:" syntax
+        if model.endswith(':'):
+            provider_name = model[:-1]
+            row = self.dbconn.execute(
+                "SELECT value FROM ai_state WHERE key = ?",
+                (f"default:{provider_name}",)
+            ).fetchone()
+            if not row:
+                raise Exception(f"No default model set for provider: {provider_name}")
+            model = f"{provider_name}:{row[0]}"
+
         if model.startswith('google:'):
             model_name = model[7:]  # Remove 'google:' prefix
             if not isinstance(self.openai, Google):
                 self.openai = Google(self.config)
             self.openai.set_model(model_name)
+            self.openai_provider_name = "Google"
         elif ':' in model:
             provider_name, model_name = model.split(':', 1)
             providers = self.config.get('ai_providers', {})
@@ -169,13 +191,51 @@ class SMS900():
             }
             self.openai = OpenAI(provider_config)
             self.openai.set_model(model_name)
+            self.openai_provider_name = provider_name.capitalize()
         else:
             if not isinstance(self.openai, OpenAI):
                 self.openai = OpenAI(self.config)
             self.openai.set_model(model)
+            self.openai_provider_name = "OpenAI"
+
+        self.dbconn.execute(
+            "INSERT OR REPLACE INTO ai_state (key, value) VALUES (?, ?)",
+            ("last_model", model)
+        )
 
     def openai_reset_history(self):
         self.openai_history.clear()
+
+    def openai_get_info(self):
+        model = self.openai.override_model or self.openai.config_model
+        return (self.openai_provider_name or "Unknown", model)
+
+    def openai_set_default_model(self, provider, model):
+        self.dbconn.execute(
+            "INSERT OR REPLACE INTO ai_state (key, value) VALUES (?, ?)",
+            (f"default:{provider}", model)
+        )
+
+    def openai_get_defaults(self):
+        rows = self.dbconn.execute(
+            "SELECT key, value FROM ai_state WHERE key LIKE 'default:%'"
+        ).fetchall()
+        return [(key[len("default:"):], value) for key, value in rows]
+
+    def _load_ai_model(self):
+        if not self.openai:
+            return
+
+        try:
+            row = self.dbconn.execute(
+                "SELECT value FROM ai_state WHERE key = ?",
+                ("last_model",)
+            ).fetchone()
+            if row:
+                logging.info("Restoring AI model: %s", row[0])
+                self.openai_set_model(row[0])
+        except Exception as err:
+            logging.info("Failed to restore AI model, using config default: %s", err)
 
     def timers_list(self):
         for (uuid, timer) in self.timers.items():
