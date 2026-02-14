@@ -20,7 +20,7 @@ from sms900.phonebook import PhoneBook, SMS900InvalidAddressbookEntry
 from sms900.ircthread import IRCThread
 from sms900.http_interface import HTTPThread
 from sms900.indexer import Indexer
-from sms900.ai import create_ai_provider
+from sms900.ai import create_ai_provider, OpenAI, Google
 
 
 class SMS900InvalidNumberFormatException(Exception):
@@ -61,7 +61,7 @@ class SMS900():
         self.irc_thread.start()
 
         try:
-            self.openai = create_ai_provider(self.config)
+            self.openai, self.openai_provider_name = create_ai_provider(self.config)
         except Exception as err:
             logging.info("Failed to initialize AI provider: %s", err)
 
@@ -159,14 +159,18 @@ class SMS900():
         self.openai.set_prompt(prompt)
 
     def openai_set_model(self, model):
-        from sms900.ai import OpenAI, Google
-
         if model.startswith('google:'):
             model_name = model[7:]  # Remove 'google:' prefix
             if not isinstance(self.openai, Google):
                 self.openai = Google(self.config)
             self.openai.set_model(model_name)
             self.openai_provider_name = "Google"
+        elif model.startswith('openai:'):
+            model_name = model[7:]  # Remove 'openai:' prefix
+            if not isinstance(self.openai, OpenAI):
+                self.openai = OpenAI(self.config)
+            self.openai.set_model(model_name)
+            self.openai_provider_name = "OpenAI"
         elif ':' in model:
             provider_name, model_name = model.split(':', 1)
             providers = self.config.get('ai_providers', {})
@@ -378,6 +382,9 @@ class SMS900():
             elif event['event_type'] == 'SET_AI_DEFAULT':
                 provider = event['provider']
                 model = event['model']
+                valid_providers = {'google', 'openai'} | set(self.config.get('ai_providers', {}).keys())
+                if provider not in valid_providers:
+                    raise Exception(f"Unknown AI provider: {provider}")
                 self.dbconn.execute(
                     "INSERT OR REPLACE INTO ai_state (key, value) VALUES (?, ?)",
                     (f"default:{provider}", model)

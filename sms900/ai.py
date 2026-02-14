@@ -189,9 +189,9 @@ def create_ai_provider(config):
     """Factory function to create the appropriate AI provider based on config."""
     if 'openai_api_key' in config:
         logging.info("Using OpenAI AI provider")
-        return OpenAI(config)
+        return OpenAI(config), "OpenAI"
     elif 'google_api_key' in config:
         logging.info("Using Google AI provider")
-        return Google(config)
+        return Google(config), "Google"
     else:
-        return None
+        return None, None
