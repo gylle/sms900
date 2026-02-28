@@ -670,6 +670,8 @@ class SMS900():
                     contents = part.content.decode('utf-8', 'ignore')
                     if not len(contents.strip()):
                         continue
+                    if disposition_name == 'subject' and contents.strip() == 'MMS':
+                        continue
 
                     filename = path.join(save_path, '%d-%s.txt' % (i, disposition_name))
                     i += 1
@@ -721,6 +723,8 @@ class SMS900():
             if text_type in payload:
                 for body in payload[text_type]:
                     if not len(body.strip()):
+                        continue
+                    if text_type == 'subject' and body.strip() == 'MMS':
                         continue
 
                     filename = path.join(save_path, '%d-%s.txt' % (i, text_type))

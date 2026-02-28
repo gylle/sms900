@@ -28,5 +28,18 @@
         </ul>
       <hr>
     {% endfor %}
+    {% if page_filenames|length > 1 %}
+    <nav>
+      {% if prev_page %}<a href="{{prev_page}}">&laquo; Previous page</a>{% endif %}
+      {% for filename in page_filenames %}
+        {% if loop.index0 == current_page %}
+          <strong>{{loop.index}}</strong>
+        {% else %}
+          <a href="{{filename}}">{{loop.index}}</a>
+        {% endif %}
+      {% endfor %}
+      {% if next_page %}<a href="{{next_page}}">Next page &raquo;</a>{% endif %}
+    </nav>
+    {% endif %}
   </body>
 </html>

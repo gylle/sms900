@@ -27,7 +27,7 @@ class Indexer():
             index_path
         )
 
-    def generate_global_index(self, base_path, filename = "mms.html"):
+    def generate_global_index(self, base_path, per_page = 10):
         all_mms = []
 
         for f in listdir(base_path):
@@ -47,14 +47,25 @@ class Indexer():
 
         all_mms = sorted(all_mms, key = lambda mms: mms['time'], reverse = True)
 
+        # Split into pages
+        pages = [all_mms[i:i + per_page] for i in range(0, len(all_mms), per_page)] or [[]]
+        page_filenames = ["mms.html"] + [f"mms{i}.html" for i in range(1, len(pages))]
+
         template = self.env.get_template("global-index.html")
-        index_path = path.join(base_path, filename)
-        self._write_file(
-            template.render(
-                all_mms = all_mms
-            ),
-            index_path
-        )
+        for page_num, page_mms in enumerate(pages):
+            prev_page = page_filenames[page_num - 1] if page_num > 0 else None
+            next_page = page_filenames[page_num + 1] if page_num < len(pages) - 1 else None
+
+            self._write_file(
+                template.render(
+                    all_mms = page_mms,
+                    prev_page = prev_page,
+                    next_page = next_page,
+                    page_filenames = page_filenames,
+                    current_page = page_num,
+                ),
+                path.join(base_path, page_filenames[page_num])
+            )
 
     def reindex_all(self, base_path):
         for f in listdir(base_path):
