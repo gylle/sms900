@@ -173,8 +173,7 @@ class SMS900():
             self.openai_provider_name = "Anthropic"
         elif model.startswith('openai:'):
             model_name = model[7:]  # Remove 'openai:' prefix
-            if not isinstance(self.openai, OpenAI):
-                self.openai = OpenAI(self.config)
+            self.openai = OpenAI(self.config)
             self.openai.set_model(model_name)
             self.openai_provider_name = "OpenAI"
         elif ':' in model:
@@ -192,8 +191,7 @@ class SMS900():
             self.openai.set_model(model_name)
             self.openai_provider_name = provider_name.capitalize()
         else:
-            if not isinstance(self.openai, OpenAI):
-                self.openai = OpenAI(self.config)
+            self.openai = OpenAI(self.config)
             self.openai.set_model(model)
             self.openai_provider_name = "OpenAI"
 
