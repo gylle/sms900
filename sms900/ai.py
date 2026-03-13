@@ -185,11 +185,38 @@ class Google(AIProvider):
         return response.text.strip()
 
 
+class Anthropic(AIProvider):
+    """Anthropic Claude API provider."""
+
+    def __init__(self, config):
+        super().__init__(config)
+        from anthropic import Anthropic as AnthropicClient
+        self.client = AnthropicClient(api_key=config['anthropic_api_key'])
+        self.config_model = config.get('anthropic_model', 'claude-sonnet-4-20250514')
+
+    def complete_prompt_chat(self, prompt):
+        system_prompt, user_message = prompt
+
+        message = self.client.messages.create(
+            model=self.override_model or self.config_model,
+            max_tokens=1024,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": user_message}
+            ]
+        )
+
+        return message.content[0].text.strip()
+
+
 def create_ai_provider(config):
     """Factory function to create the appropriate AI provider based on config."""
     if 'openai_api_key' in config:
         logging.info("Using OpenAI AI provider")
         return OpenAI(config), "OpenAI"
+    elif 'anthropic_api_key' in config:
+        logging.info("Using Anthropic AI provider")
+        return Anthropic(config), "Anthropic"
     elif 'google_api_key' in config:
         logging.info("Using Google AI provider")
         return Google(config), "Google"

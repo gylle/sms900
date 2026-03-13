@@ -20,7 +20,7 @@ from sms900.phonebook import PhoneBook, SMS900InvalidAddressbookEntry
 from sms900.ircthread import IRCThread
 from sms900.http_interface import HTTPThread
 from sms900.indexer import Indexer
-from sms900.ai import create_ai_provider, OpenAI, Google
+from sms900.ai import create_ai_provider, OpenAI, Google, Anthropic
 
 
 class SMS900InvalidNumberFormatException(Exception):
@@ -165,6 +165,12 @@ class SMS900():
                 self.openai = Google(self.config)
             self.openai.set_model(model_name)
             self.openai_provider_name = "Google"
+        elif model.startswith('anthropic:'):
+            model_name = model[10:]  # Remove 'anthropic:' prefix
+            if not isinstance(self.openai, Anthropic):
+                self.openai = Anthropic(self.config)
+            self.openai.set_model(model_name)
+            self.openai_provider_name = "Anthropic"
         elif model.startswith('openai:'):
             model_name = model[7:]  # Remove 'openai:' prefix
             if not isinstance(self.openai, OpenAI):
@@ -382,7 +388,7 @@ class SMS900():
             elif event['event_type'] == 'SET_AI_DEFAULT':
                 provider = event['provider']
                 model = event['model']
-                valid_providers = {'google', 'openai'} | set(self.config.get('ai_providers', {}).keys())
+                valid_providers = {'google', 'openai', 'anthropic'} | set(self.config.get('ai_providers', {}).keys())
                 if provider not in valid_providers:
                     raise Exception(f"Unknown AI provider: {provider}")
                 self.dbconn.execute(
