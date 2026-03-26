@@ -2,9 +2,10 @@ import unittest
 import os
 import sys
 
-sys.path.insert(0, os.getcwd() + '/..')
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 
-import ai
+from sms900 import ai
+from sms900.sms900 import SMS900
 
 class TestOpenAiUtils(unittest.TestCase):
     def setUp(self):
@@ -75,6 +76,37 @@ class TestOpenAiUtils(unittest.TestCase):
             "abcdefgh",
             self.instance.strip_imaginary_response("abcdefgh\n<kalle> xyzåäö\nok")
         )
+
+class TestFormatIrc(unittest.TestCase):
+    def setUp(self):
+        self.format_irc = SMS900._format_irc
+
+    def _make_config(self, enabled):
+        obj = type('Obj', (), {'config': {'irc_formatting': enabled}})()
+        return obj
+
+    def test_bold(self):
+        obj = self._make_config(True)
+        self.assertEqual('\x02bold\x02', self.format_irc(obj, '**bold**'))
+
+    def test_italic(self):
+        obj = self._make_config(True)
+        self.assertEqual('\x1ditalic\x1d', self.format_irc(obj, '*italic*'))
+
+    def test_mixed(self):
+        obj = self._make_config(True)
+        self.assertEqual(
+            '\x02bold\x02 and \x1ditalic\x1d',
+            self.format_irc(obj, '**bold** and *italic*')
+        )
+
+    def test_disabled(self):
+        obj = self._make_config(False)
+        self.assertEqual('**bold** and *italic*', self.format_irc(obj, '**bold** and *italic*'))
+
+    def test_no_markdown(self):
+        obj = self._make_config(True)
+        self.assertEqual('plain text', self.format_irc(obj, 'plain text'))
 
 if __name__ == '__main__':
     unittest.main()

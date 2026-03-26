@@ -29,6 +29,8 @@
         }
     },
 
+    "irc_formatting": true,
+
     "mms_save_path": "/srv/sms900",
     "external_mms_url": "http://example.com/mms"
 }

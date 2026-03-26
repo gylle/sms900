@@ -345,7 +345,7 @@ class SMS900():
 
                         self._openai_parse_response_commands(response)
 
-                        self._send_privmsg(self.config['channel'], response)
+                        self._send_privmsg(self.config['channel'], self._format_irc(response))
                 else:
                     logging.info("openai not configured")
             elif event['event_type'] == 'REMINDER_TRIGGERED':
@@ -523,6 +523,13 @@ class SMS900():
         except TwilioRestException as err:
             self._send_privmsg(self.config['channel'],
                                "Failed to lookup number: %s" % err)
+
+    def _format_irc(self, text):
+        if not self.config.get('irc_formatting', False):
+            return text
+        text = re.sub(r'\*\*(.+?)\*\*', '\x02\\1\x02', text)
+        text = re.sub(r'\*(.+?)\*', '\x1d\\1\x1d', text)
+        return text
 
     def _send_privmsg(self, target, msg):
         self.irc_thread.send_privmsg(target, msg)
