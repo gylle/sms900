@@ -192,21 +192,23 @@ class Anthropic(AIProvider):
         super().__init__(config)
         from anthropic import Anthropic as AnthropicClient
         self.client = AnthropicClient(api_key=config['anthropic_api_key'])
-        self.config_model = config.get('anthropic_model', 'claude-sonnet-4-20250514')
+        self.config_model = config.get('anthropic_model', 'claude-sonnet-4-6')
 
     def complete_prompt_chat(self, prompt):
         system_prompt, user_message = prompt
 
         message = self.client.messages.create(
             model=self.override_model or self.config_model,
-            max_tokens=1024,
+            max_tokens=16000,
             system=system_prompt,
             messages=[
                 {"role": "user", "content": user_message}
             ]
         )
 
-        return message.content[0].text.strip()
+        return "".join(
+            block.text for block in message.content if block.type == "text"
+        ).strip()
 
 
 def create_ai_provider(config):
