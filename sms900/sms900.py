@@ -418,7 +418,7 @@ class SMS900():
             traceback.print_exc()
 
     def _openai_get_relevant_context(self, data):
-        default_limit = 20
+        default_limit = 5000
         context = list(self.openai_history)
 
         if 'include_all_length' in data:
