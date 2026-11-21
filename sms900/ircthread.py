@@ -1,56 +1,70 @@
-from collections import deque
 import logging
-from threading import Thread, Semaphore
-import time
-
-from oyoyo.client import IRCClient
-from oyoyo.cmdhandler import DefaultCommandHandler
-from oyoyo import helpers
-
 import re
+import threading
+import time
+from collections import deque
+from datetime import timedelta
+from threading import Thread
 
-class IRCThreadCallbackHandler(DefaultCommandHandler):
-    @classmethod
-    def set_sms900(cls, sms900):
-        cls.sms900 = sms900
+from irc.bot import ExponentialBackoff, SingleServerIRCBot
 
-    @classmethod
-    def set_pong_queue(cls, pong_queue):
-        cls.pong_queue = pong_queue
+MSG_SEND_INTERVAL = timedelta(milliseconds=500)
+KEEPALIVE_INTERVAL = 60
+ACTIVITY_TIMEOUT = 180
+MAX_SEND_ATTEMPTS = 3
 
-    @classmethod
-    def set_channel(cls, channel):
-        cls.channel = channel
 
-    def __init__(self, client):
-        super(IRCThreadCallbackHandler, self).__init__(client)
-        self.cli = client
+class IRCBot(SingleServerIRCBot):
+    def __init__(self, sms900, host, port, nick, channel):
+        SingleServerIRCBot.__init__(self,
+                                    [(host, port)],
+                                    nick,
+                                    nick,
+                                    recon=ExponentialBackoff(min_interval=5, max_interval=60))
+        self.sms900 = sms900
+        self.channel = channel
+        self.cmd_queue = deque()
+        self._setup_done = False
+        self._lock = threading.Lock()
+        self.last_activity = time.monotonic()
+        self.reactor.add_global_handler("all_events", self._touch)
 
-    def ping(self, prefix, server):
-        logging.info("PING/%s/%s" % (prefix, server))
-        self.client.send("PONG", server)
+    def _touch(self, connection, event):
+        self.last_activity = time.monotonic()
 
-    def pong(self, prefix, server, something):
-        logging.info("PONG/%s/%s/%s" % (prefix, server, something))
-        self.pong_queue.append(server)
+    def on_welcome(self, connection, event):
+        logging.info("Connected, joining %s", self.channel)
+        connection.join(self.channel)
+        # The reactor and scheduler outlive connections, so schedule exactly once
+        with self._lock:
+            if not self._setup_done:
+                connection.reactor.scheduler.execute_every(KEEPALIVE_INTERVAL, self._keepalive)
+                connection.reactor.scheduler.execute_every(MSG_SEND_INTERVAL, self._drain_cmd_queue)
+                self._setup_done = True
 
-    def nicknameinuse(self, server, b, nickname, msg):
-        logging.info("Nickname already in use: %s/%s/%s/%s" % (server, b, nickname, msg))
-        # FIXME: This algorithm is stupid
-        nickname = nickname.decode('ascii') + "_"
-        logging.info("Trying with %s.." % nickname)
-        self.client.send("NICK %s" % nickname)
+    def _keepalive(self):
+        # set_keepalive() schedules an unguarded ping that raises into the
+        # reactor loop while disconnected, killing it; ping manually instead
+        if self.connection.is_connected():
+            self.connection.ping('keep-alive')
 
-    def welcome(self, a, b, c):
-        logging.info("(001) Welcome: %s/%s/%s" % (a, b, c))
-        self.client.send("JOIN %s" % self.channel)
+    def on_nicknameinuse(self, connection, event):
+        new_nick = connection.get_nickname() + "_"
+        logging.info("Nickname in use, trying %s", new_nick)
+        connection.nick(new_nick)
 
-    def privmsg(self, _hostmask, _chan, _msg):
-        logging.info("%s in %s said: %s" % (_hostmask, _chan, _msg))
+    def on_pubmsg(self, connection, event):
+        self._handle_message(connection, event)
 
-        msg = _msg.decode("utf-8", "ignore")
-        chan = _chan.decode("utf-8", "ignore")
-        hostmask = _hostmask.decode("utf-8", "ignore")
+    def on_privmsg(self, connection, event):
+        self._handle_message(connection, event)
+
+    def _handle_message(self, connection, event):
+        hostmask = f"{event.source.nick}!{event.source.user}@{event.source.host}"
+        chan = event.target
+        msg = event.arguments[0]
+
+        logging.info("%s in %s said: %s", hostmask, chan, msg)
 
         self.sms900.on_privmsg_received(hostmask, chan, msg)
 
@@ -76,15 +90,51 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
             args = m.group(2)
             cmd_dispatch[m.group(1).strip()](hostmask, chan, args)
 
+    def _reply(self, target, msg):
+        self.connection.privmsg(target, msg)
+
+    def _drain_cmd_queue(self):
+        if self.connection.is_connected():
+            lag = time.monotonic() - self.last_activity
+            if lag > ACTIVITY_TIMEOUT:
+                logging.warning("No activity from server for %.0f seconds, forcing reconnect" % lag)
+                self.last_activity = time.monotonic()
+                self.connection.disconnect("Ping timeout")
+                return
+        else:
+            logging.debug("Not connected, deferring %s queued message(s)" % len(self.cmd_queue))
+            return
+
+        with self._lock:
+            if not self.cmd_queue:
+                return
+        target, msg, attempts = self.cmd_queue.popleft()
+        logging.info('Handling event (%s, %s)' % (target, msg))
+        try:
+            self.connection.privmsg(target, msg)
+        except Exception as e:
+            attempts += 1
+            if attempts < MAX_SEND_ATTEMPTS:
+                logging.warning("Failed to send privmsg to %s (attempt %s): %s" % (target, attempts, e))
+                self.cmd_queue.appendleft((target, msg, attempts))
+            else:
+                logging.error("Dropping privmsg to %s after %s attempts: %s" % (target, attempts, msg))
+
+    def send_privmsg(self, target, msg):
+        for line in msg.split('\n'):
+            line = line.strip()
+            if line:  # Skip empty lines
+                self.cmd_queue.append((target, line, 0))
+
     def _parse_cmd_send_sms_to_skatteola(self, hostmask, chan, cmd):
         return self._parse_cmd_send_sms(hostmask, chan, "skatteola %s" % cmd)
 
     def _parse_cmd_send_sms(self, hostmask, chan, cmd):
-        logging.info('s! %s %s %s' % (hostmask, chan, cmd))
+        logging.info('s! %s %s', hostmask, cmd)
 
         m = re.match(r'^\s*(\S+)\s+(.+)', cmd, re.UNICODE)
         if not m:
-            helpers.msg(self.cli, chan, 'Usage: !s(end) <contact|number> <msg..>')
+            self._reply(chan, 'Usage: !s(end) <contact|number> <msg..>')
             return
 
         destination = m.group(1)
@@ -97,11 +147,11 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
         })
 
     def _parse_cmd_pb_add(self, hostmask, chan, cmd):
-        logging.info('s! %s %s %s' % (hostmask, chan, cmd))
+        logging.info('a! %s %s', hostmask, cmd)
 
         m = re.match(r'^\s*(\S+)\s+(\S+)\s*$', cmd, re.UNICODE)
         if not m:
-            helpers.msg(self.cli, chan, 'Usage: !a(dd) contact <number|email>')
+            self._reply(chan, 'Usage: !a(dd) contact <number|email>')
             return
 
         nickname = m.group(1)
@@ -122,11 +172,11 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
         })
 
     def _parse_cmd_pb_del(self, hostmask, chan, cmd):
-        logging.info('s! %s %s %s' % (hostmask, chan, cmd))
+        logging.info('d! %s %s', hostmask, cmd)
 
         m = re.match(r'^\s*(\S+)\s*$', cmd, re.UNICODE)
         if not m:
-            helpers.msg(self.cli, chan, 'Usage: !d(elete) contact [email]')
+            self._reply(chan, 'Usage: !d(elete) contact [email]')
             return
 
         nickname = None
@@ -144,11 +194,11 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
         })
 
     def _parse_cmd_lookup_carrier(self, hostmask, chan, cmd):
-        logging.info('s! %s %s %s' % (hostmask, chan, cmd))
+        logging.info('s! %s %s', hostmask, cmd)
 
         m = re.match(r'^\s*(\S+)$', cmd, re.UNICODE)
         if not m:
-            helpers.msg(self.cli, chan, 'Usage: !l(ookup) <number>')
+            self._reply(chan, 'Usage: !l(ookup) <number>')
             return
 
         number = m.group(1)
@@ -159,39 +209,39 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
         })
 
     def _parse_cmd_reindex(self, hostmask, chan, cmd):
-        logging.info('!r %s, %s, %s' % (hostmask, chan, cmd))
+        logging.info('!r %s, %s', hostmask, chan)
 
         m = re.match(r'^\s*$', cmd, re.UNICODE)
         if not m:
-            helpers.msg(self.cli, chan, 'Usage: !r(eindex all)')
+            self._reply(chan, 'Usage: !r(eindex all)')
             return
 
         self.sms900.queue_event('REINDEX_ALL', {})
 
     def _parse_cmd_openai_prompt(self, hostmask, chan, cmd):
-        logging.info('!op %s, %s, %s' % (hostmask, chan, cmd))
+        logging.info('!op %s, %s', hostmask, chan)
 
-        new_prompt = cmd.strip();
+        new_prompt = cmd.strip()
         self.sms900.openai_set_prompt(new_prompt)
-        helpers.msg(self.cli, chan, 'Kashikomarimashita' if new_prompt else 'Prompt reset')
+        self._reply(chan, 'Kashikomarimashita' if new_prompt else 'Prompt reset')
 
     def _parse_cmd_openai_reset_history(self, hostmask, chan, cmd):
-        logging.info('!or %s, %s, %s' % (hostmask, chan, cmd))
+        logging.info('!or %s, %s', hostmask, chan)
 
         m = re.match(r'^\s*$', cmd, re.UNICODE)
         if not m:
-            helpers.msg(self.cli, chan, 'Usage: !or(reset history)')
+            self._reply(chan, 'Usage: !or(reset history)')
             return
 
         self.sms900.openai_reset_history()
-        helpers.msg(self.cli, chan, 'History reset')
+        self._reply(chan, 'History reset')
 
     def _parse_cmd_openai_comment_on_context(self, hostmask, chan, cmd):
-        logging.info('!oc %s, %s, %s' % (hostmask, chan, cmd))
+        logging.info('!oc %s, %s', hostmask, chan)
 
         m = re.match(r'^\s*\d+\s*$', cmd, re.UNICODE)
         if not m:
-            helpers.msg(self.cli, chan, 'Usage: !oc(comment) <number-of-lines>')
+            self._reply(chan, 'Usage: !oc(comment) <number-of-lines>')
             return
 
         length = int(cmd.strip())
@@ -199,19 +249,19 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
         self.sms900.queue_event('TRIGGER_COMPLETION', {'include_all_length': length})
 
     def _parse_cmd_openai_model(self, hostmask, chan, cmd):
-        logging.info('!om %s, %s, %s' % (hostmask, chan, cmd))
+        logging.info('!om %s, %s', hostmask, chan)
 
         new_model = cmd.strip()
         self.sms900.queue_event('SET_AI_MODEL', {'model': new_model})
 
     def _parse_cmd_openai_info(self, hostmask, chan, cmd):
-        logging.info('!oi %s, %s, %s' % (hostmask, chan, cmd))
+        logging.info('!oi %s, %s', hostmask, chan)
 
         provider, model = self.sms900.openai_get_info()
-        helpers.msg(self.cli, chan, f'Current model: {provider} / {model}')
+        self._reply(chan, f'Current model: {provider} / {model}')
 
     def _parse_cmd_openai_default(self, hostmask, chan, cmd):
-        logging.info('!od %s, %s, %s' % (hostmask, chan, cmd))
+        logging.info('!od %s, %s', hostmask, chan)
 
         args = cmd.strip()
         if not args:
@@ -220,7 +270,7 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
 
         m = re.match(r'^(\S+)\s+(\S+)\s*$', args, re.UNICODE)
         if not m:
-            helpers.msg(self.cli, chan, 'Usage: !od [provider model]')
+            self._reply(chan, 'Usage: !od [provider model]')
             return
 
         provider = m.group(1)
@@ -228,106 +278,41 @@ class IRCThreadCallbackHandler(DefaultCommandHandler):
         self.sms900.queue_event('SET_AI_DEFAULT', {'provider': provider, 'model': model})
 
     def _parse_cmd_timers_list(self, hostmask, chan, cmd):
-        logging.info('!tl %s, %s, %s' % (hostmask, chan, cmd))
+        logging.info('!tl %s, %s', hostmask, chan)
 
         m = re.match(r'^\s*$', cmd, re.UNICODE)
         if not m:
-            helpers.msg(self.cli, chan, 'Usage: !tl(ist)')
+            self._reply(chan, 'Usage: !tl(ist)')
             return
 
         self.sms900.timers_list()
 
     def _parse_cmd_timers_clear(self, hostmask, chan, cmd):
-        logging.info('!tc %s, %s, %s' % (hostmask, chan, cmd))
+        logging.info('!tc %s, %s', hostmask, chan)
 
         m = re.match(r'^\s*(all|[-a-fA-F0-9]{36})\s*$', cmd, re.UNICODE)
         if not m:
-            helpers.msg(self.cli, chan, 'Usage: !tc(lear) <all|uuid>')
+            self._reply(chan, 'Usage: !tc(lear) <all|uuid>')
             return
 
         count = self.sms900.timers_clear(m[1])
-        helpers.msg(self.cli, chan, f'Cleared {count} active timers')
+        self._reply(chan, f'Cleared {count} active timers')
 
     def _parse_cmd_help(self, hostmask, chan, cmd):
-        helpers.msg(
-            self.cli,
+        self._reply(
             chan,
             'Commands: s(end message), a(add contact), d(elete contact), l(ookup), r(eindex all), h(elp)'
         )
 
-class IRCThread(Thread):
-    PING_INTERVAL = 60
-    PING_TIMEOUT = 180
 
+class IRCThread(Thread):
+    """ Runs the IRC bot in a background thread using a reactor """
     def __init__(self, sms900, host, port, nick, channel):
         Thread.__init__(self)
-        self.irc_host = host
-        self.irc_port = port
-        self.irc_nick = nick
-
-        self.pong_queue = deque()
-        self.cmd_queue = deque()
-
-        IRCThreadCallbackHandler.set_sms900(sms900)
-        IRCThreadCallbackHandler.set_pong_queue(self.pong_queue)
-        IRCThreadCallbackHandler.set_channel(channel)
+        self.bot = IRCBot(sms900, host, port, nick, channel)
 
     def run(self):
-        while True:
-            try:
-                self._connect_and_run()
-            except Exception as e:
-                logging.info("Exception caught, reconnecting: %s" % e)
-
-            logging.info("Sleeping for 5 seconds..")
-            time.sleep(5)
-
-    def _connect_and_run(self):
-        cli = IRCClient(IRCThreadCallbackHandler,
-                        host=self.irc_host,
-                        port=self.irc_port,
-                        nick=self.irc_nick)
-
-        self.ping_last_reply = time.time()
-        self.ping_sent_at = False
-        self.pong_queue.clear()
-
-        conn = cli.connect()
-        while True:
-            next(conn)
-            while len(self.cmd_queue) > 0:
-                cmd = self.cmd_queue.popleft()
-                target = cmd[1]
-                msg = cmd[2]
-                logging.info('Handling event (%s) -> (%s, %s)' % (cmd, target, msg))
-                helpers.msg(cli, target, msg)
-                time.sleep(0.5)  # Rate limit to avoid excess flood
-
-            self._check_connection(cli)
-
-            time.sleep(0.2)
-
-    def _check_connection(self, cli):
-        if not self.ping_sent_at:
-            if time.time() - self.ping_last_reply > self.PING_INTERVAL:
-                self.ping_sent_at = time.time()
-                cli.send("PING %s" % int(self.ping_sent_at))
-        else:
-            lag = time.time() - self.ping_sent_at
-
-            # We'll just assume that any pong received is good enough
-            if len(self.pong_queue) > 0:
-                logging.info("Current lag: %s" % lag)
-
-                self.ping_sent_at = None
-                self.ping_last_reply = time.time()
-                self.pong_queue.clear()
-            else:
-                if lag > self.PING_TIMEOUT:
-                    raise Exception("Lag is %s, exceeded timeout %s" % (lag, self.PING_TIMEOUT))
+        self.bot.start()
 
     def send_privmsg(self, target, msg):
-        for line in msg.split('\n'):
-            line = line.strip()
-            if line:  # Skip empty lines
-                self.cmd_queue.append(['PRIVMSG', target, line])
+        self.bot.send_privmsg(target, msg)
