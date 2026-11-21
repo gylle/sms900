@@ -54,14 +54,13 @@ class IRCBot(SingleServerIRCBot):
         connection.nick(new_nick)
 
     def on_pubmsg(self, connection, event):
-        self._handle_message(connection, event)
+        self._handle_message(connection, event, event.target)
 
     def on_privmsg(self, connection, event):
-        self._handle_message(connection, event)
+        self._handle_message(connection, event, event.source.nick)
 
-    def _handle_message(self, connection, event):
+    def _handle_message(self, connection, event, chan):
         hostmask = f"{event.source.nick}!{event.source.user}@{event.source.host}"
-        chan = event.target
         msg = event.arguments[0]
 
         logging.info("%s in %s said: %s", hostmask, chan, msg)
