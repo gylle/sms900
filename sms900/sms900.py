@@ -20,7 +20,7 @@ from sms900.phonebook import PhoneBook, SMS900InvalidAddressbookEntry
 from sms900.ircthread import IRCThread
 from sms900.http_interface import HTTPThread
 from sms900.indexer import Indexer
-from sms900.ai import create_ai_provider, OpenAI, Google, Anthropic
+from sms900.ai import create_ai_provider, OpenAI, Google, Anthropic, AIRefusal
 
 
 class SMS900InvalidNumberFormatException(Exception):
@@ -329,11 +329,22 @@ class SMS900():
                 if self.openai:
                     context = self._openai_get_relevant_context(event)
 
-                    response = self.openai.generate_response(
-                        self.config['channel'],
-                        self.config['nickname'],
-                        context
-                    )
+                    try:
+                        response = self.openai.generate_response(
+                            self.config['channel'],
+                            self.config['nickname'],
+                            context
+                        )
+                    except AIRefusal as err:
+                        logging.info("AI refused to respond: %s", err)
+                        if self.openai_history:
+                            self.openai_history.pop()
+                        self._send_privmsg(
+                            self.config['channel'],
+                            "the model refused to answer; I dropped the last message from my context"
+                        )
+                        return
+
                     if response:
                         self.openai_history.append({
                             'timestamp': datetime.now().astimezone(),

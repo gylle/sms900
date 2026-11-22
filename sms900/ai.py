@@ -4,6 +4,11 @@ import logging
 import re
 
 
+class AIRefusal(Exception):
+    """Raised when the model refuses to answer or returns no usable text."""
+    pass
+
+
 class AIProvider(ABC):
     """Base class for AI providers (OpenAI, Gemini, etc.)"""
 
@@ -27,6 +32,8 @@ class AIProvider(ABC):
             return self.strip_imaginary_response(
                 self.splitlong(completion)
             )
+        except AIRefusal:
+            raise
         except Exception as err:
             logging.info("Failed to create completion: %s", err)
             return None
@@ -206,9 +213,17 @@ class Anthropic(AIProvider):
             ]
         )
 
-        return "".join(
+        text = "".join(
             block.text for block in message.content if block.type == "text"
         ).strip()
+
+        if message.stop_reason == 'refusal':
+            raise AIRefusal("safety classifiers refused the response")
+
+        if not text:
+            raise AIRefusal(f"no text in response (stop_reason={message.stop_reason})")
+
+        return text
 
 
 def create_ai_provider(config):
